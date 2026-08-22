@@ -1,0 +1,1632 @@
+import { VERSION } from '../version.js';
+import emojiCategories from './EmojiData.js';
+import specialCharacterCategories from './SpecialCharacterData.js';
+
+function alignmentIcon(type) {
+    const widths = {
+        left: [15, 11, 15, 8],
+        center: [15, 9, 13, 7],
+        right: [15, 11, 15, 8],
+        justify: [15, 15, 15, 15]
+    }[type];
+
+    const x = width => {
+        if (type === 'center') {
+            return (18 - width) / 2;
+        }
+
+        if (type === 'right') {
+            return 17 - width;
+        }
+
+        return 1;
+    };
+
+    return `
+        <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            ${widths.map((width, index) =>
+                `<rect x="${x(width)}" y="${3 + index * 3.2}" width="${width}" height="1.5" rx=".5"></rect>`
+            ).join('')}
+        </svg>
+    `;
+}
+
+function listIcon(ordered = false) {
+    return ordered
+        ? `
+            <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+                <text x="1" y="6" font-size="5">1.</text>
+                <text x="1" y="11" font-size="5">2.</text>
+                <text x="1" y="16" font-size="5">3.</text>
+                <rect x="7" y="3" width="10" height="1.4" rx=".5"></rect>
+                <rect x="7" y="8" width="10" height="1.4" rx=".5"></rect>
+                <rect x="7" y="13" width="10" height="1.4" rx=".5"></rect>
+            </svg>
+        `
+        : `
+            <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+                <circle cx="3" cy="4" r="1.2"></circle>
+                <circle cx="3" cy="9" r="1.2"></circle>
+                <circle cx="3" cy="14" r="1.2"></circle>
+                <rect x="7" y="3" width="10" height="1.4" rx=".5"></rect>
+                <rect x="7" y="8" width="10" height="1.4" rx=".5"></rect>
+                <rect x="7" y="13" width="10" height="1.4" rx=".5"></rect>
+            </svg>
+        `;
+}
+
+
+function historyIcon(direction) {
+    const transform = direction === 'redo' ? 'scale(-1 1) translate(-18 0)' : '';
+
+    return `
+        <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <g transform="${transform}">
+                <path d="M7.2 4H3.5V.8L.7 4.3l2.8 3.5V4.9h3.7a5.1 5.1 0 1 1 0 10.2H5.5v-1.7h1.7a3.4 3.4 0 1 0 0-6.8z"></path>
+            </g>
+        </svg>
+    `;
+}
+
+function clearFormattingIcon() {
+    return `
+        <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <path d="M5.1 2h8.2v1.7H10l-2.7 8h2.9v1.7H2.7v-1.7h2.8l2.7-8H5.1z"></path>
+            <path d="M11.5 11.2l4.8 4.8-1.2 1.2-4.8-4.8z"></path>
+        </svg>
+    `;
+}
+
+
+function textColorIcon() {
+    return `
+        <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <path d="M3 15h2l1.2-3h5.6l1.2 3h2L10 2H8L3 15zm4-5 2-5 2 5H7z"></path>
+            <rect x="3" y="16" width="12" height="1.5" rx=".5"></rect>
+        </svg>
+    `;
+}
+
+function backgroundColorIcon() {
+    return `
+        <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <path d="M3 13.5h12V17H3z"></path>
+            <path d="M5 12l3.5-9h1L13 12h-2l-.8-2H7.8L7 12H5zm3.5-4h1L9 6.5 8.5 8z"></path>
+        </svg>
+    `;
+}
+
+
+function codeIcon(type) {
+    if (type === 'json') {
+        return `
+            <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+                <path d="M6.5 2.5H5.3c-1.3 0-2 .7-2 2v2.1c0 .9-.4 1.4-1.3 1.6.9.2 1.3.7 1.3 1.6v2.1c0 1.3.7 2 2 2h1.2v-1.5h-.8c-.6 0-.9-.3-.9-.9V9.7c0-1-.4-1.6-1.2-2 .8-.4 1.2-1 1.2-2V4.5c0-.6.3-.9.9-.9h.8V2.5zm5 0v1.5h.8c.6 0 .9.3.9.9v1.2c0 1 .4 1.6 1.2 2-.8.4-1.2 1-1.2 2v1.8c0 .6-.3.9-.9.9h-.8v1.5h1.2c1.3 0 2-.7 2-2V10c0-.9.4-1.4 1.3-1.6-.9-.2-1.3-.7-1.3-1.6V4.5c0-1.3-.7-2-2-2h-1.2z"></path>
+            </svg>
+        `;
+    }
+
+    return `
+        <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <path d="M6.2 4.1L1.8 9l4.4 4.9 1.2-1.1L4 9l3.4-3.8-1.2-1.1zm5.6 0-1.2 1.1L14 9l-3.4 3.8 1.2 1.1L16.2 9l-4.4-4.9z"></path>
+        </svg>
+    `;
+}
+
+
+function previewIcon() {
+    return `
+        <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <path d="M9 3C4.8 3 2 6.2.8 9c1.2 2.8 4 6 8.2 6s7-3.2 8.2-6C16 6.2 13.2 3 9 3zm0 10.2C6 13.2 3.8 11 2.7 9 3.8 7 6 4.8 9 4.8S14.2 7 15.3 9C14.2 11 12 13.2 9 13.2z"></path>
+            <circle cx="9" cy="9" r="2.4"></circle>
+        </svg>
+    `;
+}
+
+
+function inlineImageIcon() {
+    return `
+        <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <rect x="2" y="3" width="14" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+            <circle cx="6" cy="7" r="1.5"></circle>
+            <path d="M3.5 13l3.5-3.5 2.3 2.2 2.1-2.1 3.1 3.4z"></path>
+        </svg>
+    `;
+}
+
+
+function videoIcon() {
+    return `
+        <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <rect x="2" y="4" width="10" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"></rect>
+            <path d="M12 7l4-2v8l-4-2z"></path>
+        </svg>
+    `;
+}
+
+export default class TextToolbar {
+    constructor(translations, actions = {}) {
+        this.t = translations;
+        this.actions = actions;
+        this.defaultFontFamily = actions.defaultFontFamily || 'system-ui';
+        this.customButtons = Array.isArray(actions.customButtons) ? actions.customButtons : [];
+        this.activeEditable = null;
+        this.commandButtons = new Map();
+        this.alignmentTrigger = null;
+        this.listTrigger = null;
+        this.quoteButton = null;
+        this.linkButton = null;
+        this.formatSelect = null;
+        this.fontSizeSelect = null;
+        this.fontFamilySelect = null;
+        this.savedRange = null;
+        this.element = document.createElement('div');
+        this.element.className = 'vhd-text-toolbar';
+        this.element.hidden = false;
+
+        this.#build();
+
+        document.addEventListener('click', event => {
+            if (!this.element.contains(event.target)) {
+                this.#closeMenus();
+            }
+        });
+
+        document.addEventListener('selectionchange', () => {
+            const selection = window.getSelection();
+            const node = selection?.anchorNode;
+            const element = node?.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+
+            if (
+                element instanceof HTMLElement
+                && this.activeEditable
+                && (element === this.activeEditable || this.activeEditable.contains(element))
+            ) {
+                this.updateActiveStates();
+            }
+        });
+    }
+
+    #button(label, command, value = null, html = null) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'vhd-toolbar-button';
+        button.title = label;
+        button.setAttribute('aria-label', label);
+
+        if (html) {
+            button.innerHTML = html;
+        } else {
+            button.textContent = label;
+        }
+
+        if (['bold', 'italic', 'underline', 'strikeThrough'].includes(command)) {
+            this.commandButtons.set(command, button);
+        }
+
+        button.addEventListener('mousedown', event => {
+            this.#saveSelection();
+            event.preventDefault();
+
+            if (command === 'createLink') {
+                const url = window.prompt('URL');
+
+                if (url) {
+                    this.#restoreSelection();
+                    document.execCommand(command, false, url);
+                    this.#keepSelection();
+                }
+
+                return;
+            }
+
+            this.#restoreSelection();
+            document.execCommand(command, false, value);
+            this.#keepSelection();
+        });
+
+        return button;
+    }
+
+
+    #actionButton(label, callback, html) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'vhd-toolbar-button';
+        button.title = label;
+        button.setAttribute('aria-label', label);
+        button.innerHTML = html;
+        button.addEventListener('mousedown', event => {
+            this.#saveSelection();
+            event.preventDefault();
+            callback?.();
+        });
+        return button;
+    }
+
+
+
+    #separator() {
+        const separator = document.createElement('span');
+        separator.className = 'vhd-toolbar-separator';
+        separator.setAttribute('aria-hidden', 'true');
+        return separator;
+    }
+
+
+    #dropdown(label, iconHtml, items, stateKey = null) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'vhd-toolbar-dropdown';
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'vhd-toolbar-button vhd-toolbar-dropdown-trigger';
+        trigger.title = label;
+        trigger.setAttribute('aria-label', label);
+        trigger.setAttribute('aria-haspopup', 'true');
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.innerHTML = `${iconHtml}<span class="vhd-toolbar-caret">▾</span>`;
+
+        const menu = document.createElement('div');
+        menu.className = 'vhd-toolbar-menu';
+        menu.hidden = true;
+
+        for (const item of items) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'vhd-toolbar-menu-item';
+            button.title = item.label;
+            button.setAttribute('aria-label', item.label);
+            button.innerHTML = item.icon
+                ? `<span class="vhd-toolbar-menu-icon">${item.icon}</span><span>${item.label}</span>`
+                : `<span>${item.label}</span>`;
+
+            button.addEventListener('mousedown', event => {
+                event.preventDefault();
+                this.#restoreSelection();
+                item.action();
+                this.#keepSelection();
+                this.#closeMenus();
+            });
+
+            menu.append(button);
+        }
+
+        trigger.addEventListener('mousedown', event => {
+            this.#saveSelection();
+            event.preventDefault();
+            const willOpen = menu.hidden;
+            this.#closeMenus();
+
+            if (willOpen) {
+                menu.hidden = false;
+                trigger.setAttribute('aria-expanded', 'true');
+            }
+        });
+
+        if (stateKey === 'alignment') {
+            this.alignmentTrigger = trigger;
+        }
+
+        if (stateKey === 'list') {
+            this.listTrigger = trigger;
+        }
+
+        wrapper.append(trigger, menu);
+        return wrapper;
+    }
+
+    #closeMenus() {
+        this.element.querySelectorAll('.vhd-toolbar-menu').forEach(menu => {
+            menu.hidden = true;
+        });
+
+        this.element.querySelectorAll('.vhd-toolbar-dropdown-trigger').forEach(trigger => {
+            trigger.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    #applyList(ordered, styleType) {
+        document.execCommand(
+            ordered ? 'insertOrderedList' : 'insertUnorderedList',
+            false,
+            null
+        );
+
+        const selection = window.getSelection();
+
+        if (!selection?.rangeCount) {
+            return;
+        }
+
+        let node = selection.anchorNode;
+
+        if (node?.nodeType === Node.TEXT_NODE) {
+            node = node.parentElement;
+        }
+
+        const list = node?.closest?.(ordered ? 'ol' : 'ul');
+
+        if (list) {
+            list.style.listStyleType = styleType;
+        }
+    }
+
+
+    #clearFormatting() {
+        const editable = this.activeEditable;
+
+        if (!(editable instanceof HTMLElement) || editable.contentEditable !== 'true') {
+            return;
+        }
+
+        const plainText = editable.innerText;
+
+        editable.replaceChildren(document.createTextNode(plainText));
+        editable.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: 'formatRemove',
+            data: null
+        }));
+
+        const range = document.createRange();
+        range.selectNodeContents(editable);
+        range.collapse(false);
+
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        editable.focus();
+    }
+
+    #toggleQuote() {
+        const selection = window.getSelection();
+
+        if (!selection || selection.rangeCount === 0) {
+            return;
+        }
+
+        let node = selection.anchorNode;
+
+        if (node?.nodeType === Node.TEXT_NODE) {
+            node = node.parentElement;
+        }
+
+        if (!(node instanceof HTMLElement)) {
+            return;
+        }
+
+        const blockquote = node.closest('blockquote');
+
+        if (blockquote && this.activeEditable?.contains(blockquote)) {
+            const parent = blockquote.parentNode;
+
+            while (blockquote.firstChild) {
+                parent.insertBefore(blockquote.firstChild, blockquote);
+            }
+
+            blockquote.remove();
+        } else {
+            document.execCommand('formatBlock', false, 'blockquote');
+        }
+
+        this.activeEditable?.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: 'formatBlock',
+            data: null
+        }));
+
+        this.updateActiveStates();
+    }
+
+    #emojiDropdown() {
+        const wrapper = document.createElement('span');
+        wrapper.className = 'vhd-toolbar-dropdown';
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'vhd-toolbar-button';
+        trigger.textContent = '😀';
+        trigger.title = this.t.toolbar.emoji;
+        trigger.setAttribute('aria-label', this.t.toolbar.emoji);
+        trigger.setAttribute('aria-haspopup', 'true');
+        trigger.setAttribute('aria-expanded', 'false');
+
+        const menu = document.createElement('span');
+        menu.className = 'vhd-toolbar-menu vhd-emoji-picker';
+        menu.hidden = true;
+
+        const tabs = document.createElement('span');
+        tabs.className = 'vhd-emoji-tabs';
+
+        const panel = document.createElement('span');
+        panel.className = 'vhd-emoji-panel';
+
+        const language = document.documentElement.lang?.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+
+        const renderCategory = category => {
+            panel.replaceChildren();
+
+            category.emojis.forEach(emoji => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'vhd-emoji-button';
+                button.textContent = emoji;
+                button.title = emoji;
+                button.setAttribute('aria-label', emoji);
+
+                button.addEventListener('mousedown', event => event.preventDefault());
+                button.addEventListener('click', () => {
+                    this.#insertEmoji(emoji);
+                    menu.hidden = true;
+                    trigger.setAttribute('aria-expanded', 'false');
+                });
+
+                panel.append(button);
+            });
+
+            tabs.querySelectorAll('.vhd-emoji-tab').forEach(button => {
+                button.classList.toggle('is-active', button.dataset.category === category.id);
+            });
+        };
+
+        emojiCategories.forEach(category => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'vhd-emoji-tab';
+            button.dataset.category = category.id;
+            button.textContent = category.icon;
+            button.title = category.label[language] || category.label.en;
+            button.setAttribute('aria-label', category.label[language] || category.label.en);
+
+            button.addEventListener('mousedown', event => event.preventDefault());
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                renderCategory(category);
+            });
+
+            tabs.append(button);
+        });
+
+        menu.append(tabs, panel);
+        renderCategory(emojiCategories[0]);
+
+        trigger.addEventListener('mousedown', () => this.#saveSelection());
+        trigger.addEventListener('click', event => {
+            event.stopPropagation();
+            const open = menu.hidden;
+            this.#closeMenus();
+            menu.hidden = !open;
+            trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+
+        wrapper.append(trigger, menu);
+        return wrapper;
+    }
+
+    #saveSelection() {
+        const selection = window.getSelection();
+
+        if (!selection || selection.rangeCount === 0 || !this.activeEditable) {
+            return;
+        }
+
+        const range = selection.getRangeAt(0);
+
+        if (this.activeEditable.contains(range.commonAncestorContainer)) {
+            this.savedRange = range.cloneRange();
+        }
+    }
+
+    #restoreSelection() {
+        if (
+            !(this.activeEditable instanceof HTMLElement)
+            || !this.savedRange
+            || !this.activeEditable.contains(this.savedRange.commonAncestorContainer)
+        ) {
+            return false;
+        }
+
+        const selection = window.getSelection();
+
+        if (!selection) {
+            return false;
+        }
+
+        selection.removeAllRanges();
+        selection.addRange(this.savedRange.cloneRange());
+        return true;
+    }
+
+    #getTextSelectionBookmark() {
+        if (!(this.activeEditable instanceof HTMLElement)) {
+            return null;
+        }
+
+        const selection = window.getSelection();
+
+        if (!selection || selection.rangeCount === 0) {
+            return null;
+        }
+
+        const range = selection.getRangeAt(0);
+
+        if (!this.activeEditable.contains(range.commonAncestorContainer)) {
+            return null;
+        }
+
+        const beforeStart = range.cloneRange();
+        beforeStart.selectNodeContents(this.activeEditable);
+        beforeStart.setEnd(range.startContainer, range.startOffset);
+
+        const beforeEnd = range.cloneRange();
+        beforeEnd.selectNodeContents(this.activeEditable);
+        beforeEnd.setEnd(range.endContainer, range.endOffset);
+
+        return {
+            start: beforeStart.toString().length,
+            end: beforeEnd.toString().length
+        };
+    }
+
+    #restoreTextSelectionBookmark(bookmark) {
+        if (
+            !bookmark
+            || !(this.activeEditable instanceof HTMLElement)
+        ) {
+            return false;
+        }
+
+        const walker = document.createTreeWalker(
+            this.activeEditable,
+            NodeFilter.SHOW_TEXT
+        );
+
+        const range = document.createRange();
+        let node;
+        let offset = 0;
+        let startSet = false;
+        let endSet = false;
+
+        while ((node = walker.nextNode())) {
+            const nextOffset = offset + node.textContent.length;
+
+            if (!startSet && bookmark.start <= nextOffset) {
+                range.setStart(
+                    node,
+                    Math.max(0, bookmark.start - offset)
+                );
+                startSet = true;
+            }
+
+            if (!endSet && bookmark.end <= nextOffset) {
+                range.setEnd(
+                    node,
+                    Math.max(0, bookmark.end - offset)
+                );
+                endSet = true;
+                break;
+            }
+
+            offset = nextOffset;
+        }
+
+        if (!startSet || !endSet) {
+            return false;
+        }
+
+        const selection = window.getSelection();
+
+        if (!selection) {
+            return false;
+        }
+
+        selection.removeAllRanges();
+        selection.addRange(range);
+        this.savedRange = range.cloneRange();
+
+        return true;
+    }
+
+    #keepSelection(updateState = true) {
+        const selection = window.getSelection();
+
+        if (
+            selection
+            && selection.rangeCount > 0
+            && this.activeEditable instanceof HTMLElement
+        ) {
+            const range = selection.getRangeAt(0);
+
+            if (this.activeEditable.contains(range.commonAncestorContainer)) {
+                this.savedRange = range.cloneRange();
+            }
+        }
+
+        this.activeEditable?.focus({ preventScroll: true });
+        this.#restoreSelection();
+
+        if (updateState) {
+            this.updateActiveStates();
+        }
+    }
+
+    insertAtCursor(content, options = {}) {
+        const html = options.html === true;
+
+        if (!(this.activeEditable instanceof HTMLElement)) {
+            return false;
+        }
+
+        const selection = window.getSelection();
+        let range = this.savedRange?.cloneRange() ?? null;
+
+        if (!range || !this.activeEditable.contains(range.commonAncestorContainer)) {
+            range = document.createRange();
+            range.selectNodeContents(this.activeEditable);
+            range.collapse(false);
+        }
+
+        range.deleteContents();
+
+        let lastNode;
+
+        if (html) {
+            const template = document.createElement('template');
+            template.innerHTML = String(content ?? '');
+            const fragment = template.content;
+            lastNode = fragment.lastChild;
+            range.insertNode(fragment);
+        } else {
+            lastNode = document.createTextNode(String(content ?? ''));
+            range.insertNode(lastNode);
+        }
+
+        if (lastNode) {
+            range.setStartAfter(lastNode);
+        }
+        range.collapse(true);
+
+        selection.removeAllRanges();
+        selection.addRange(range);
+        this.savedRange = range.cloneRange();
+
+        this.activeEditable.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: html ? 'insertHTML' : 'insertText',
+            data: html ? null : String(content ?? '')
+        }));
+
+        this.activeEditable.focus();
+        this.updateActiveStates();
+        return true;
+    }
+
+    #customActionsDropdown() {
+        if (!this.customButtons.length) {
+            return null;
+        }
+
+        const wrapper = document.createElement('span');
+        wrapper.className = 'vhd-toolbar-dropdown vhd-custom-actions';
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'vhd-toolbar-button vhd-toolbar-dropdown-trigger';
+        trigger.innerHTML = `+<span class="vhd-toolbar-caret">▾</span>`;
+        trigger.title = this.t.toolbar.customActions;
+        trigger.setAttribute('aria-label', this.t.toolbar.customActions);
+        trigger.setAttribute('aria-haspopup', 'true');
+        trigger.setAttribute('aria-expanded', 'false');
+
+        const menu = document.createElement('span');
+        menu.className = 'vhd-toolbar-menu vhd-custom-actions-menu';
+        menu.hidden = true;
+
+        for (const item of this.customButtons) {
+            if (!item || !item.label || !item.action) continue;
+
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'vhd-toolbar-menu-item vhd-custom-action-item';
+
+            const icon = document.createElement('span');
+            icon.className = 'vhd-custom-action-icon';
+            icon.innerHTML = item.icon || '•';
+
+            const label = document.createElement('span');
+            label.className = 'vhd-custom-action-label';
+            label.textContent = item.label;
+
+            button.append(icon, label);
+
+            button.addEventListener('mousedown', event => {
+                event.preventDefault();
+                this.#saveSelection();
+            });
+
+            button.addEventListener('click', async event => {
+                event.stopPropagation();
+                menu.hidden = true;
+                trigger.setAttribute('aria-expanded', 'false');
+
+                const fn = typeof item.action === 'function'
+                    ? item.action
+                    : window[item.action];
+
+                if (typeof fn !== 'function') {
+                    console.warn(`Vanilla HTML Designer: custom action "${item.action}" was not found.`);
+                    return;
+                }
+
+                const result = await fn({
+                    editor: this.actions.publicApi?.(),
+                    editable: this.activeEditable,
+                    insert: (content, options = {}) => this.insertAtCursor(content, options)
+                });
+
+                if (typeof result === 'string') {
+                    this.insertAtCursor(result);
+                } else if (result && typeof result === 'object' && 'content' in result) {
+                    this.insertAtCursor(result.content, { html: result.html === true });
+                }
+            });
+
+            menu.append(button);
+        }
+
+        if (!menu.children.length) {
+            return null;
+        }
+
+        trigger.addEventListener('mousedown', event => {
+            event.preventDefault();
+            this.#saveSelection();
+            const open = menu.hidden;
+            this.#closeMenus();
+            menu.hidden = !open;
+            trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+
+        wrapper.append(trigger, menu);
+        return wrapper;
+    }
+
+    #insertTextAtSavedSelection(text) {
+        this.insertAtCursor(text);
+    }
+
+    #insertEmoji(emoji) {
+        this.#insertTextAtSavedSelection(emoji);
+    }
+
+    #specialCharacterDropdown() {
+        const wrapper = document.createElement('span');
+        wrapper.className = 'vhd-toolbar-dropdown';
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'vhd-toolbar-button';
+        trigger.textContent = 'Ω';
+        trigger.title = this.t.toolbar.specialCharacters;
+        trigger.setAttribute('aria-label', this.t.toolbar.specialCharacters);
+        trigger.setAttribute('aria-haspopup', 'true');
+        trigger.setAttribute('aria-expanded', 'false');
+
+        const menu = document.createElement('span');
+        menu.className = 'vhd-toolbar-menu vhd-special-picker';
+        menu.hidden = true;
+
+        const tabs = document.createElement('span');
+        tabs.className = 'vhd-special-tabs';
+
+        const panel = document.createElement('span');
+        panel.className = 'vhd-special-panel';
+
+        const language = document.documentElement.lang?.toLowerCase().startsWith('fr') ? 'fr' : 'en';
+
+        const renderCategory = category => {
+            panel.replaceChildren();
+
+            category.characters.forEach(character => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'vhd-special-button';
+                button.textContent = character;
+                button.title = character;
+                button.setAttribute('aria-label', character);
+
+                button.addEventListener('mousedown', event => event.preventDefault());
+                button.addEventListener('click', () => {
+                    this.#insertTextAtSavedSelection(character);
+                    menu.hidden = true;
+                    trigger.setAttribute('aria-expanded', 'false');
+                });
+
+                panel.append(button);
+            });
+
+            tabs.querySelectorAll('.vhd-special-tab').forEach(button => {
+                button.classList.toggle('is-active', button.dataset.category === category.id);
+            });
+        };
+
+        specialCharacterCategories.forEach(category => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'vhd-special-tab';
+            button.dataset.category = category.id;
+            button.textContent = category.icon;
+            button.title = category.label[language] || category.label.en;
+            button.setAttribute('aria-label', category.label[language] || category.label.en);
+
+            button.addEventListener('mousedown', event => event.preventDefault());
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                renderCategory(category);
+            });
+
+            tabs.append(button);
+        });
+
+        menu.append(tabs, panel);
+        renderCategory(specialCharacterCategories[0]);
+
+        trigger.addEventListener('mousedown', () => this.#saveSelection());
+        trigger.addEventListener('click', event => {
+            event.stopPropagation();
+            const open = menu.hidden;
+            this.#closeMenus();
+            menu.hidden = !open;
+            trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+
+        wrapper.append(trigger, menu);
+        return wrapper;
+    }
+
+    #showAboutDialog() {
+        if (!this.aboutDialog) {
+            this.aboutDialog = document.createElement('dialog');
+            this.aboutDialog.className = 'vhd-about-dialog';
+
+            const content = document.createElement('div');
+            content.className = 'vhd-about-content';
+
+            const logo = document.createElement('div');
+            logo.className = 'vhd-about-logo';
+            logo.innerHTML = `
+                <svg viewBox="0 0 64 40" aria-hidden="true" focusable="false">
+                    <path d="M14 8 4 20l10 12"></path>
+                    <path d="M24 13 32 28l8-15"></path>
+                    <path d="M48 17 44 28"></path>
+                    <path d="M50 8 60 20 50 32"></path>
+                </svg>
+            `;
+
+            const title = document.createElement('h2');
+            title.textContent = 'Vanilla HTML Designer';
+
+            const version = document.createElement('p');
+            version.className = 'vhd-about-version';
+            version.textContent = `Version ${VERSION}`;
+
+            const description = document.createElement('p');
+            description.innerHTML = `
+                Éditeur visuel HTML léger<br>
+                100 % Vanilla JavaScript<br>
+                Sans framework
+            `;
+
+            const credits = document.createElement('p');
+            credits.innerHTML = `
+                Idée de F. Milhiet<br>
+                Programmation ChatGPT
+            `;
+
+            const license = document.createElement('p');
+            license.textContent = 'Licence : AGPL-3.0';
+
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'vhd-secondary-button';
+            close.textContent = 'Fermer';
+            close.addEventListener('click', () => this.aboutDialog.close());
+
+            content.append(
+                logo,
+                title,
+                version,
+                description,
+                credits,
+                license,
+                close
+            );
+
+            this.aboutDialog.append(content);
+            document.body.append(this.aboutDialog);
+
+            this.aboutDialog.addEventListener('click', event => {
+                if (event.target === this.aboutDialog) {
+                    this.aboutDialog.close();
+                }
+            });
+        }
+
+        this.aboutDialog.showModal();
+    }
+
+    #build() {
+        const fontFamily = document.createElement('select');
+        fontFamily.className = 'vhd-toolbar-select vhd-font-family-select';
+        fontFamily.title = this.t.toolbar.fontFamily;
+        fontFamily.setAttribute('aria-label', this.t.toolbar.fontFamily);
+        fontFamily.innerHTML = `
+            <option value="system-ui">System UI</option>
+            <option value="Arial, sans-serif">Arial</option>
+            <option value="Verdana, sans-serif">Verdana</option>
+            <option value="Tahoma, sans-serif">Tahoma</option>
+            <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+            <option value="Georgia, serif">Georgia</option>
+            <option value="'Times New Roman', serif">Times New Roman</option>
+            <option value="'Courier New', monospace">Courier New</option>
+            <option value="serif">Serif</option>
+            <option value="sans-serif">Sans-serif</option>
+            <option value="monospace">Monospace</option>
+        `;
+
+        const normalizeFamily = value => String(value)
+            .replaceAll('"', '')
+            .replaceAll("'", '')
+            .replace(/\s*,\s*/g, ',')
+            .trim()
+            .toLowerCase();
+
+        const firstFamily = value =>
+            normalizeFamily(value).split(',')[0];
+
+        const defaultFirstFamily = firstFamily(this.defaultFontFamily);
+
+        let defaultOption = Array.from(fontFamily.options).find(option =>
+            firstFamily(option.value) === defaultFirstFamily
+        );
+
+        if (defaultOption) {
+            defaultOption.value = this.defaultFontFamily;
+        } else {
+            defaultOption = document.createElement('option');
+            defaultOption.value = this.defaultFontFamily;
+            defaultOption.textContent = String(this.defaultFontFamily)
+                .split(',')[0]
+                .replaceAll('"', '')
+                .replaceAll("'", '')
+                .trim();
+
+            fontFamily.prepend(defaultOption);
+        }
+
+        this.fontFamilySelect = fontFamily;
+        this.defaultFontOptionValue = defaultOption.value;
+
+        fontFamily.value = this.defaultFontOptionValue;
+
+        fontFamily.addEventListener('mousedown', event => {
+            this.#saveSelection();
+            event.stopPropagation();
+        });
+
+        fontFamily.addEventListener('change', () => {
+            const selectedFont = fontFamily.value;
+
+            if (!selectedFont || !this.#restoreSelection()) {
+                return;
+            }
+
+            const selection = window.getSelection();
+
+            if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                return;
+            }
+
+            /*
+             * Ask the browser to generate CSS styles rather than legacy
+             * <font face> markup. This also avoids replacing nodes immediately
+             * after the command, which could invalidate the active Range.
+             */
+            document.execCommand('styleWithCSS', false, true);
+            document.execCommand('fontName', false, selectedFont);
+
+            this.activeEditable?.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                inputType: 'formatFontName',
+                data: null
+            }));
+
+            /*
+             * Keep the exact same text selected. Do not recalculate the toolbar
+             * before restoring the requested select value: selectionchange can
+             * otherwise make the previous font appear selected again.
+             */
+            this.#keepSelection(false);
+            this.fontFamilySelect.value = selectedFont;
+
+            requestAnimationFrame(() => {
+                this.fontFamilySelect.value = selectedFont;
+            });
+        });
+
+        const fontSize = document.createElement('select');
+        fontSize.className = 'vhd-toolbar-select vhd-font-size-select';
+        fontSize.title = this.t.toolbar.fontSize;
+        fontSize.setAttribute('aria-label', this.t.toolbar.fontSize);
+        fontSize.innerHTML = `
+            <option value="8">8 pt</option>
+            <option value="9">9 pt</option>
+            <option value="10">10 pt</option>
+            <option value="11">11 pt</option>
+            <option value="12" selected>12 pt</option>
+            <option value="14">14 pt</option>
+            <option value="16">16 pt</option>
+            <option value="18">18 pt</option>
+            <option value="20">20 pt</option>
+            <option value="24">24 pt</option>
+            <option value="28">28 pt</option>
+            <option value="36">36 pt</option>
+            <option value="48">48 pt</option>
+        `;
+        this.fontSizeSelect = fontSize;
+        fontSize.value = '12';
+
+        fontSize.addEventListener('mousedown', event => {
+            this.#saveSelection();
+            event.stopPropagation();
+        });
+
+        fontSize.addEventListener('change', () => {
+            const selectedSize = fontSize.value;
+
+            if (!selectedSize || !this.#restoreSelection()) {
+                return;
+            }
+
+            const selection = window.getSelection();
+
+            if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+                return;
+            }
+
+            const bookmark = this.#getTextSelectionBookmark();
+
+            document.execCommand('fontSize', false, '7');
+
+            this.activeEditable?.querySelectorAll('font[size="7"]').forEach(element => {
+                const span = document.createElement('span');
+                span.style.fontSize = `${selectedSize}pt`;
+
+                while (element.firstChild) {
+                    span.append(element.firstChild);
+                }
+
+                element.replaceWith(span);
+            });
+
+            this.activeEditable?.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                inputType: 'formatFontSize',
+                data: null
+            }));
+
+            /*
+             * Replacing the temporary <font> elements invalidates the browser
+             * Range. Rebuild it from text offsets so the same text remains
+             * selected and another size can be tested immediately.
+             */
+            this.#restoreTextSelectionBookmark(bookmark);
+            this.activeEditable?.focus({ preventScroll: true });
+            this.#restoreTextSelectionBookmark(bookmark);
+
+            /*
+             * Keep the requested size visible in the toolbar. A
+             * selectionchange event may run while the DOM is being rewritten.
+             */
+            this.fontSizeSelect.value = selectedSize;
+
+            requestAnimationFrame(() => {
+                this.fontSizeSelect.value = selectedSize;
+            });
+        });
+
+        const format = document.createElement('select');
+        format.className = 'vhd-toolbar-select';
+        format.innerHTML = `
+            <option value="p" selected>${this.t.toolbar.paragraph}</option>
+            <option value="h1">${this.t.toolbar.heading1}</option>
+            <option value="h2">${this.t.toolbar.heading2}</option>
+            <option value="h3">${this.t.toolbar.heading3}</option>
+            <option value="h4">${this.t.toolbar.heading4}</option>
+            <option value="h5">${this.t.toolbar.heading5}</option>
+            <option value="h6">${this.t.toolbar.heading6}</option>
+        `;
+        this.formatSelect = format;
+        format.value = 'p';
+
+        format.addEventListener('mousedown', event => {
+            this.#saveSelection();
+            event.stopPropagation();
+        });
+
+        format.addEventListener('change', () => {
+            this.#restoreSelection();
+
+            const currentTag = this.activeEditable?.tagName?.toLowerCase();
+            const nextTag = format.value;
+            const isHeadingBlock = /^h[1-6]$/.test(currentTag || '');
+
+            if (isHeadingBlock && /^h[1-6]$/.test(nextTag)) {
+                this.activeEditable.dispatchEvent(new CustomEvent('vhd:heading-level', {
+                    bubbles: true,
+                    detail: {
+                        level: Number(nextTag.slice(1))
+                    }
+                }));
+                return;
+            }
+
+            document.execCommand('formatBlock', false, nextTag);
+            this.#keepSelection();
+        });
+
+        const colorControl = document.createElement('label');
+        colorControl.className = 'vhd-toolbar-color-control';
+        colorControl.title = this.t.toolbar.color;
+        colorControl.setAttribute('aria-label', this.t.toolbar.color);
+        colorControl.innerHTML = textColorIcon();
+
+        const color = document.createElement('input');
+        color.type = 'color';
+        color.className = 'vhd-toolbar-color-input';
+        color.setAttribute('aria-label', this.t.toolbar.color);
+        color.addEventListener('mousedown', () => this.#saveSelection());
+        color.addEventListener('input', () => {
+            if (!this.#restoreSelection()) {
+                return;
+            }
+
+            document.execCommand('foreColor', false, color.value);
+            this.#keepSelection();
+        });
+        colorControl.append(color);
+
+        const backgroundColorControl = document.createElement('label');
+        backgroundColorControl.className = 'vhd-toolbar-color-control';
+        backgroundColorControl.title = this.t.toolbar.backgroundColor;
+        backgroundColorControl.setAttribute('aria-label', this.t.toolbar.backgroundColor);
+        backgroundColorControl.innerHTML = backgroundColorIcon();
+
+        const backgroundColor = document.createElement('input');
+        backgroundColor.type = 'color';
+        backgroundColor.className = 'vhd-toolbar-color-input';
+        backgroundColor.setAttribute('aria-label', this.t.toolbar.backgroundColor);
+        backgroundColor.addEventListener('mousedown', () => this.#saveSelection());
+        backgroundColor.addEventListener('input', () => {
+            if (!this.#restoreSelection()) {
+                return;
+            }
+
+            document.execCommand('hiliteColor', false, backgroundColor.value);
+            this.#keepSelection();
+        });
+        backgroundColorControl.append(backgroundColor);
+
+        const lists = this.#dropdown(
+            this.t.toolbar.lists,
+            listIcon(false),
+            [
+                {
+                    label: this.t.toolbar.unorderedDisc,
+                    icon: listIcon(false),
+                    action: () => this.#applyList(false, 'disc')
+                },
+                {
+                    label: this.t.toolbar.unorderedSquare,
+                    icon: listIcon(false),
+                    action: () => this.#applyList(false, 'square')
+                },
+                {
+                    label: this.t.toolbar.unorderedCircle,
+                    icon: listIcon(false),
+                    action: () => this.#applyList(false, 'circle')
+                },
+                {
+                    label: this.t.toolbar.orderedDecimal,
+                    icon: listIcon(true),
+                    action: () => this.#applyList(true, 'decimal')
+                },
+                {
+                    label: this.t.toolbar.orderedLowerAlpha,
+                    icon: listIcon(true),
+                    action: () => this.#applyList(true, 'lower-alpha')
+                },
+                {
+                    label: this.t.toolbar.orderedUpperAlpha,
+                    icon: listIcon(true),
+                    action: () => this.#applyList(true, 'upper-alpha')
+                },
+                {
+                    label: this.t.toolbar.orderedLowerRoman,
+                    icon: listIcon(true),
+                    action: () => this.#applyList(true, 'lower-roman')
+                },
+                {
+                    label: this.t.toolbar.orderedUpperRoman,
+                    icon: listIcon(true),
+                    action: () => this.#applyList(true, 'upper-roman')
+                }
+            ],
+            'list'
+        );
+
+        const alignment = this.#dropdown(
+            this.t.toolbar.alignment,
+            alignmentIcon('left'),
+            [
+                {
+                    label: this.t.toolbar.alignLeft,
+                    icon: alignmentIcon('left'),
+                    action: () => document.execCommand('justifyLeft', false, null)
+                },
+                {
+                    label: this.t.toolbar.alignCenter,
+                    icon: alignmentIcon('center'),
+                    action: () => document.execCommand('justifyCenter', false, null)
+                },
+                {
+                    label: this.t.toolbar.alignRight,
+                    icon: alignmentIcon('right'),
+                    action: () => document.execCommand('justifyRight', false, null)
+                },
+                {
+                    label: this.t.toolbar.justify,
+                    icon: alignmentIcon('justify'),
+                    action: () => document.execCommand('justifyFull', false, null)
+                }
+            ],
+            'alignment'
+        );
+
+        const undoButton = this.#actionButton(
+            this.t.actions.undo,
+            () => this.actions.undo?.(),
+            historyIcon('undo')
+        );
+
+        const redoButton = this.#actionButton(
+            this.t.actions.redo,
+            () => this.actions.redo?.(),
+            historyIcon('redo')
+        );
+
+        const clearFormattingButton = this.#actionButton(
+            this.t.actions.clearFormatting,
+            () => this.#clearFormatting(),
+            clearFormattingIcon()
+        );
+
+        this.quoteButton = this.#actionButton(
+            this.t.toolbar.quote,
+            () => this.#toggleQuote(),
+            '❝'
+        );
+
+        const customActions = this.#customActionsDropdown();
+
+        const versionBadge = document.createElement('button');
+        versionBadge.type = 'button';
+        versionBadge.className = 'vhd-version-badge';
+        versionBadge.title = `Vanilla HTML Designer — version ${VERSION}`;
+        versionBadge.setAttribute('aria-label', `À propos de Vanilla HTML Designer — version ${VERSION}`);
+        versionBadge.innerHTML = `
+            <svg viewBox="0 0 64 40" aria-hidden="true" focusable="false">
+                <path d="M14 8 4 20l10 12"></path>
+                <path d="M24 13 32 28l8-15"></path>
+                <path d="M48 17 44 28"></path>
+                <path d="M50 8 60 20 50 32"></path>
+            </svg>
+        `;
+        versionBadge.addEventListener('click', () => this.#showAboutDialog());
+
+        this.element.append(
+            // History / reset
+            undoButton,
+            redoButton,
+            clearFormattingButton,
+            this.#separator(),
+
+            // Character formatting
+            this.#button(this.t.toolbar.bold, 'bold', null, '<strong>B</strong>'),
+            this.#button(this.t.toolbar.italic, 'italic', null, '<em>I</em>'),
+            this.#button(this.t.toolbar.underline, 'underline', null, '<u>U</u>'),
+            this.#button(this.t.toolbar.strike, 'strikeThrough', null, '<s>S</s>'),
+            colorControl,
+            backgroundColorControl,
+            fontFamily,
+            fontSize,
+            this.#separator(),
+
+            // Insertion
+            this.linkButton = this.#button(this.t.toolbar.link, 'createLink', null, '🔗'),
+            this.#actionButton(
+                this.t.toolbar.inlineImage,
+                () => this.actions.insertInlineImage?.(this.activeEditable),
+                inlineImageIcon()
+            ),
+            this.#actionButton(
+                this.t.toolbar.video,
+                () => this.actions.insertVideo?.(this.activeEditable),
+                videoIcon()
+            ),
+            this.#emojiDropdown(),
+            this.#specialCharacterDropdown(),
+            this.#separator(),
+
+            // Paragraph formatting
+            format,
+            lists,
+            this.quoteButton,
+            alignment,
+            this.#separator(),
+
+            // Host application extensions
+            ...(customActions ? [customActions, this.#separator()] : []),
+
+            // Output / preview
+            this.#actionButton(
+                this.t.actions.exportJson,
+                () => this.actions.exportJson?.(),
+                codeIcon('json')
+            ),
+            this.#actionButton(
+                this.t.actions.exportHtml,
+                () => this.actions.exportHtml?.(),
+                codeIcon('html')
+            ),
+            this.#actionButton(
+                this.t.actions.preview,
+                () => this.actions.preview?.(),
+                previewIcon()
+            ),
+
+            // Version / identity
+            versionBadge
+        );
+    }
+
+
+    updateActiveStates() {
+        if (!(this.activeEditable instanceof HTMLElement)) {
+            return;
+        }
+
+        const selection = window.getSelection();
+
+        if (!selection || selection.rangeCount === 0) {
+            return;
+        }
+
+        let node = selection.anchorNode;
+
+        if (!node) {
+            return;
+        }
+
+        if (node.nodeType === Node.TEXT_NODE) {
+            node = node.parentElement;
+        }
+
+        if (!(node instanceof HTMLElement)) {
+            return;
+        }
+
+        if (node !== this.activeEditable && !this.activeEditable.contains(node)) {
+            return;
+        }
+
+        const ancestors = [];
+        let current = node;
+
+        while (current instanceof HTMLElement) {
+            ancestors.push(current);
+
+            if (current === this.activeEditable) {
+                break;
+            }
+
+            current = current.parentElement;
+        }
+
+        const hasTag = (...tags) => ancestors.some(element =>
+            tags.includes(element.tagName.toLowerCase())
+        );
+
+        const hasComputedStyle = predicate => ancestors.some(element =>
+            predicate(window.getComputedStyle(element))
+        );
+
+        const states = {
+            bold:
+                hasTag('strong', 'b')
+                || hasComputedStyle(style => {
+                    const numericWeight = Number.parseInt(style.fontWeight, 10);
+                    return style.fontWeight === 'bold'
+                        || (!Number.isNaN(numericWeight) && numericWeight >= 600);
+                }),
+
+            italic:
+                hasTag('em', 'i')
+                || hasComputedStyle(style =>
+                    style.fontStyle === 'italic' || style.fontStyle === 'oblique'
+                ),
+
+            underline:
+                hasTag('u')
+                || hasComputedStyle(style =>
+                    style.textDecorationLine.includes('underline')
+                ),
+
+            strikeThrough:
+                hasTag('s', 'strike', 'del')
+                || hasComputedStyle(style =>
+                    style.textDecorationLine.includes('line-through')
+                )
+        };
+
+        for (const [command, button] of this.commandButtons.entries()) {
+            const active = Boolean(states[command]);
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        }
+
+        if (this.fontFamilySelect) {
+            const normalizeFamily = value => String(value)
+                .replaceAll('"', '')
+                .replaceAll("'", '')
+                .replace(/\s*,\s*/g, ',')
+                .trim()
+                .toLowerCase();
+
+            const explicitFontElement = ancestors.find(element =>
+                element !== this.activeEditable
+                && (
+                    element.style?.fontFamily
+                    || (
+                        element.tagName.toLowerCase() === 'font'
+                        && element.getAttribute('face')
+                    )
+                )
+            );
+
+            if (!explicitFontElement) {
+                this.fontFamilySelect.value = this.defaultFontOptionValue;
+            } else {
+                const explicitFamily = normalizeFamily(
+                    explicitFontElement.style?.fontFamily
+                    || explicitFontElement.getAttribute('face')
+                    || ''
+                );
+                const explicitFirstFamily = explicitFamily.split(',')[0];
+                const options = Array.from(this.fontFamilySelect.options);
+
+                let match = options.find(option =>
+                    normalizeFamily(option.value) === explicitFamily
+                );
+
+                if (!match) {
+                    match = options.find(option =>
+                        normalizeFamily(option.value).split(',')[0] === explicitFirstFamily
+                    );
+                }
+
+                this.fontFamilySelect.value = match?.value
+                    || this.defaultFontOptionValue;
+            }
+        }
+
+        if (this.fontSizeSelect) {
+            const styledElement = ancestors.find(element => element.style?.fontSize);
+            const computedPixels = styledElement
+                ? Number.parseFloat(window.getComputedStyle(styledElement).fontSize)
+                : Number.parseFloat(window.getComputedStyle(node).fontSize);
+
+            const computedPoints = computedPixels * 0.75;
+
+            const availableSizes = Array.from(this.fontSizeSelect.options)
+                .map(option => option.value)
+                .filter(Boolean);
+
+            const matchedSize = availableSizes.find(value =>
+                Math.abs(Number(value) - computedPoints) < 0.25
+            );
+
+            this.fontSizeSelect.value = matchedSize || '12';
+        }
+
+        if (this.formatSelect) {
+            const formatElement = ancestors.find(element => {
+                const tag = element.tagName.toLowerCase();
+                return ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tag);
+            });
+
+            this.formatSelect.value = formatElement
+                ? formatElement.tagName.toLowerCase()
+                : 'p';
+        }
+
+        const link = ancestors.find(element =>
+            element.tagName.toLowerCase() === 'a'
+        );
+
+        if (this.linkButton) {
+            const active = Boolean(link);
+            this.linkButton.classList.toggle('is-active', active);
+            this.linkButton.setAttribute('aria-pressed', active ? 'true' : 'false');
+        }
+
+        const quote = ancestors.find(element =>
+            element.tagName.toLowerCase() === 'blockquote'
+        );
+
+        if (this.quoteButton) {
+            const active = Boolean(quote);
+            this.quoteButton.classList.toggle('is-active', active);
+            this.quoteButton.setAttribute('aria-pressed', active ? 'true' : 'false');
+        }
+
+        const list = ancestors.find(element => {
+            const tag = element.tagName.toLowerCase();
+            return tag === 'ul' || tag === 'ol';
+        });
+
+        if (this.listTrigger) {
+            this.listTrigger.classList.toggle('is-active', Boolean(list));
+
+            if (list) {
+                this.listTrigger.dataset.listType = list.tagName.toLowerCase();
+                this.listTrigger.dataset.listStyle = window.getComputedStyle(list).listStyleType;
+            } else {
+                delete this.listTrigger.dataset.listType;
+                delete this.listTrigger.dataset.listStyle;
+            }
+        }
+
+        if (this.alignmentTrigger) {
+            const block = ancestors.find(element => {
+                const display = window.getComputedStyle(element).display;
+                return ['block', 'list-item', 'table-cell', 'flex', 'grid'].includes(display);
+            }) || this.activeEditable;
+
+            const alignment = window.getComputedStyle(block).textAlign;
+
+            this.alignmentTrigger.classList.toggle(
+                'is-active',
+                ['center', 'right', 'justify'].includes(alignment)
+            );
+
+            this.alignmentTrigger.dataset.alignment = alignment;
+        }
+    }
+
+    setActiveEditable(element) {
+        this.activeEditable = element;
+        this.updateActiveStates();
+    }
+
+    show() {
+        this.element.hidden = false;
+        this.updateActiveStates();
+    }
+
+    hide() {
+        this.#closeMenus();
+    }
+}

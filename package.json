@@ -1,0 +1,29 @@
+{
+  "name": "vanilla-html-designer",
+  "version": "0.6.22",
+  "type": "module",
+  "description": "Lightweight visual HTML content designer written in Vanilla JavaScript",
+  "license": "AGPL-3.0",
+  "keywords": [
+    "html",
+    "content-builder",
+    "page-builder",
+    "visual-editor",
+    "vanilla-javascript",
+    "wysiwyg"
+  ],
+  "files": [
+    "src",
+    "demo",
+    "docs",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": "./src/HtmlDesigner.js",
+    "./style.css": "./src/html-designer.css",
+    "./lang/en": "./src/lang/en.js",
+    "./lang/fr": "./src/lang/fr.js"
+  }
+}

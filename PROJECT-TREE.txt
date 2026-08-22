@@ -1,0 +1,32 @@
+.gitignore
+CHANGELOG.md
+LICENSE
+README.md
+demo/
+    index.html
+docs/
+    api.md
+    project-format.md
+package.json
+src/
+    HtmlDesigner.js
+    blocks/
+        BlockFactory.js
+        ButtonBlock.js
+        DividerBlock.js
+        HeadingBlock.js
+        ImageBlock.js
+        SpacerBlock.js
+        TextBlock.js
+    core/
+        Editor.js
+        History.js
+        Serializer.js
+    html-designer.css
+    lang/
+        en.js
+        fr.js
+    layout/
+        Grid.js
+    toolbar/
+        TextToolbar.js

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Vanilla HTML Designer</title>
+    <link rel="stylesheet" href="../src/html-designer.css">
+    <style>
+        body {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+            font-family: system-ui, sans-serif;
+            background: #f5f6f8;
+        }
+
+        h1 {
+            margin-top: 0;
+        }
+
+        .demo-actions {
+            display: flex;
+            gap: 8px;
+            margin: 16px 0;
+        }
+
+        .demo-actions button {
+            padding: 8px 12px;
+        }
+
+        dialog {
+            width: min(900px, 90vw);
+        }
+
+        pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+    <h1>Vanilla HTML Designer</h1>
+    <p>Prototype v0.1.0 — grille 6 unités et contenu HTML générique.</p>
+
+    <div id="htmlDesigner"></div>
+
+    <script type="module">
+        import HtmlDesigner from '../src/HtmlDesigner.js';
+        import fr from '../src/lang/fr.js';
+
+        const editor = new HtmlDesigner('#htmlDesigner', {
+            translations: fr,
+
+            async onImageSelect() {
+                const src = window.prompt('URL de l’image');
+
+                if (!src) {
+                    return null;
+                }
+
+                return {
+                    src,
+                    alt: ''
+                };
+            }
+        });
+    </script>
+</body>
+</html>

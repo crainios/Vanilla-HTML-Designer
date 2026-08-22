@@ -13,15 +13,46 @@ function escapeText(value = '') {
         .replaceAll('>', '&gt;');
 }
 
+function escapeCode(value = '') {
+    return escapeText(
+        String(value)
+            .replaceAll('\r\n', '\n')
+            .replaceAll('\r', '\n')
+    ).replaceAll('\n', '&#10;');
+}
+
 function serializeBlock(block) {
     switch (block.type) {
         case 'heading': {
             const level = Math.min(6, Math.max(1, Number(block.level) || 2));
-            return `<h${level}>${block.content ?? ''}</h${level}>`;
+            const properties = block.properties ?? {};
+            const color = properties.color || '#1f2937';
+            const lineHeight = Number(properties.lineHeight ?? 1.2);
+            const letterSpacing = Number(properties.letterSpacing ?? 0);
+
+            const style = [
+                `color:${escapeAttribute(color)}`,
+                `line-height:${Number.isFinite(lineHeight) ? lineHeight : 1.2}`,
+                `letter-spacing:${Number.isFinite(letterSpacing) ? letterSpacing : 0}px`
+            ].join(';');
+
+            return `<h${level} style="${style}">${block.content ?? ''}</h${level}>`;
         }
 
-        case 'text':
-            return `<div class="vhd-text">${block.content ?? ''}</div>`;
+        case 'text': {
+            const properties = block.properties ?? {};
+            const color = properties.color || '#1f2937';
+            const lineHeight = Number(properties.lineHeight ?? 1.5);
+            const letterSpacing = Number(properties.letterSpacing ?? 0);
+
+            const style = [
+                `color:${escapeAttribute(color)}`,
+                `line-height:${Number.isFinite(lineHeight) ? lineHeight : 1.5}`,
+                `letter-spacing:${Number.isFinite(letterSpacing) ? letterSpacing : 0}px`
+            ].join(';');
+
+            return `<div class="vhd-text" style="${style}">${block.content ?? ''}</div>`;
+        }
 
         case 'image': {
             if (!block.src) {
@@ -65,6 +96,7 @@ function serializeBlock(block) {
             const borderRadius = Math.max(0, Number(properties.borderRadius ?? 5));
             const paddingHorizontal = Math.max(0, Number(properties.paddingHorizontal ?? 16));
             const paddingVertical = Math.max(0, Number(properties.paddingVertical ?? 10));
+            const opensInNewTab = properties.target === '_blank';
 
             const style = [
                 'display:inline-block',
@@ -75,16 +107,40 @@ function serializeBlock(block) {
                 'text-decoration:none'
             ].join(';');
 
-            return `<p class="vhd-button-wrap" style="text-align:${escapeAttribute(align)}"><a class="vhd-button" href="${escapeAttribute(block.url || '#')}" style="${style}">${escapeText(block.text || 'Button')}</a></p>`;
+            const targetAttributes = opensInNewTab
+                ? ' target="_blank" rel="noopener noreferrer"'
+                : '';
+
+            return `<p class="vhd-button-wrap" style="text-align:${escapeAttribute(align)}"><a class="vhd-button" href="${escapeAttribute(block.url || '#')}"${targetAttributes} style="${style}">${escapeText(block.text || 'Button')}</a></p>`;
         }
 
-        case 'divider':
-            return '<hr class="vhd-divider">';
+        case 'divider': {
+            const divider = block.properties || {};
+            const dividerColor = divider.color || '#9ca3af';
+            const dividerWidth = Number.isFinite(Number(divider.width))
+                ? Math.max(1, Number(divider.width))
+                : 1;
+            const dividerStyle = ['solid', 'dashed', 'dotted'].includes(divider.style)
+                ? divider.style
+                : 'solid';
+
+            const dividerCss = [
+                'border:0',
+                `border-top-width:${dividerWidth}px`,
+                `border-top-style:${dividerStyle}`,
+                `border-top-color:${escapeAttribute(dividerColor)}`
+            ].join(';');
+
+            return `<hr class="vhd-divider" style="${dividerCss}">`;
+        }
 
         case 'spacer': {
             const height = Math.max(0, Math.min(500, Number(block.height) || 0));
             return `<div class="vhd-spacer" style="height:${height}px" aria-hidden="true"></div>`;
         }
+
+        case 'code':
+            return `<pre class="vhd-code"><code>${escapeCode(block.code ?? '')}</code></pre>`;
 
         default:
             return '';
@@ -96,13 +152,35 @@ export default class Serializer {
         const rows = project?.rows ?? [];
 
         const html = rows.map(row => {
+            const rowProperties = row.properties ?? {};
+            const rowBackground = rowProperties.backgroundColor || '#ffffff';
+            const rowPaddingTop = Math.max(0, Number(rowProperties.paddingTop ?? 0));
+            const rowPaddingBottom = Math.max(0, Number(rowProperties.paddingBottom ?? 0));
+
             const columns = row.columns.map(column => {
+                const columnProperties = column.properties ?? {};
+                const columnBackground = columnProperties.backgroundColor || '#fafbfc';
+                const columnPadding = Math.max(0, Number(columnProperties.padding ?? 10));
                 const blocks = column.blocks.map(serializeBlock).join('\n');
-                return `<div class="vhd-col" style="--vhd-span:${column.width}">${blocks}</div>`;
+
+                const columnStyle = [
+                    `--vhd-span:${column.width}`,
+                    `background-color:${escapeAttribute(columnBackground)}`,
+                    `padding:${Number.isFinite(columnPadding) ? columnPadding : 10}px`
+                ].join(';');
+
+                return `<div class="vhd-col" style="${columnStyle}">${blocks}</div>`;
             }).join('\n');
 
             const gridUnits = row.columns.reduce((total, column) => total + column.width, 0);
-            return `<div class="vhd-row" style="--vhd-grid-units:${gridUnits}">${columns}</div>`;
+            const rowStyle = [
+                `--vhd-grid-units:${gridUnits}`,
+                `background-color:${escapeAttribute(rowBackground)}`,
+                `padding-top:${Number.isFinite(rowPaddingTop) ? rowPaddingTop : 0}px`,
+                `padding-bottom:${Number.isFinite(rowPaddingBottom) ? rowPaddingBottom : 0}px`
+            ].join(';');
+
+            return `<div class="vhd-row" style="${rowStyle}">${columns}</div>`;
         }).join('\n');
 
         return `<div class="vhd-content">${html}</div>`;

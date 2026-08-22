@@ -1,0 +1,58 @@
+.vhd-code-wrapper {
+    position: relative;
+    margin: 1em 0;
+}
+
+.vhd-code-wrapper > pre.vhd-code {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 18px 52px 18px 18px;
+    overflow: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    background: #f6f5f3;
+    color: #111827;
+    font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    white-space: pre;
+    tab-size: 4;
+}
+
+.vhd-code-wrapper > pre.vhd-code > code {
+    font: inherit;
+    color: inherit;
+    background: transparent;
+}
+
+.vhd-code-copy {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid #9ca3af;
+    border-radius: 2px;
+    background: #fff;
+    color: #374151;
+    cursor: pointer;
+}
+
+.vhd-code-copy:hover,
+.vhd-code-copy:focus-visible {
+    border-color: #2563eb;
+    color: #2563eb;
+    outline: none;
+}
+
+.vhd-code-copy svg {
+    width: 17px;
+    height: 17px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}

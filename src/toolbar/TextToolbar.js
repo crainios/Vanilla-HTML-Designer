@@ -114,6 +114,16 @@ function codeIcon(type) {
 }
 
 
+function insertCodeIcon() {
+    return `
+        <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <path d="M6.2 4.1 1.8 9l4.4 4.9 1.2-1.1L4 9l3.4-3.8-1.2-1.1zm5.6 0-1.2 1.1L14 9l-3.4 3.8 1.2 1.1L16.2 9l-4.4-4.9z"></path>
+            <path d="M10.8 2.5 7.2 15.5" fill="none" stroke="currentColor" stroke-width="1.4"></path>
+        </svg>
+    `;
+}
+
+
 function previewIcon() {
     return `
         <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
@@ -378,6 +388,130 @@ export default class TextToolbar {
         selection.addRange(range);
 
         editable.focus();
+    }
+
+    #applyAlignment(alignment) {
+        if (
+            !(this.activeEditable instanceof HTMLElement)
+            || !['left', 'center', 'right', 'justify'].includes(alignment)
+        ) {
+            return;
+        }
+
+        if (!this.#restoreSelection()) {
+            return;
+        }
+
+        const selection = window.getSelection();
+
+        if (!selection || selection.rangeCount === 0) {
+            return;
+        }
+
+        const range = selection.getRangeAt(0);
+        const blockSelector = 'p,div,li,blockquote,h1,h2,h3,h4,h5,h6';
+        const targets = [];
+
+        const addTarget = element => {
+            if (
+                element instanceof HTMLElement
+                && this.activeEditable.contains(element)
+                && !targets.includes(element)
+            ) {
+                targets.push(element);
+            }
+        };
+
+        const closestBlock = node => {
+            const element = node?.nodeType === Node.TEXT_NODE
+                ? node.parentElement
+                : node;
+
+            if (!(element instanceof HTMLElement)) {
+                return null;
+            }
+
+            if (element === this.activeEditable) {
+                return this.activeEditable;
+            }
+
+            const block = element.closest(blockSelector);
+
+            return block && this.activeEditable.contains(block)
+                ? block
+                : this.activeEditable;
+        };
+
+        if (range.collapsed) {
+            addTarget(closestBlock(range.startContainer));
+        } else {
+            const walker = document.createTreeWalker(
+                this.activeEditable,
+                NodeFilter.SHOW_ELEMENT,
+                {
+                    acceptNode: node => {
+                        if (
+                            !(node instanceof HTMLElement)
+                            || !node.matches(blockSelector)
+                        ) {
+                            return NodeFilter.FILTER_SKIP;
+                        }
+
+                        try {
+                            return range.intersectsNode(node)
+                                ? NodeFilter.FILTER_ACCEPT
+                                : NodeFilter.FILTER_SKIP;
+                        } catch {
+                            return NodeFilter.FILTER_SKIP;
+                        }
+                    }
+                }
+            );
+
+            let node;
+
+            while ((node = walker.nextNode())) {
+                /*
+                 * Keep the deepest paragraph-like nodes. Applying alignment
+                 * to a parent and its child at the same time is unnecessary
+                 * and can make nested rich text harder to edit.
+                 */
+                const hasMatchingChild = [...node.querySelectorAll(blockSelector)]
+                    .some(child => {
+                        try {
+                            return range.intersectsNode(child);
+                        } catch {
+                            return false;
+                        }
+                    });
+
+                if (!hasMatchingChild) {
+                    addTarget(node);
+                }
+            }
+
+            if (!targets.length) {
+                addTarget(closestBlock(range.startContainer));
+                addTarget(closestBlock(range.endContainer));
+            }
+        }
+
+        if (!targets.length) {
+            addTarget(this.activeEditable);
+        }
+
+        for (const target of targets) {
+            target.style.textAlign = alignment;
+        }
+
+        this.activeEditable.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: 'formatJustify',
+            data: null
+        }));
+
+        this.#keepSelection(false);
+        this.updateActiveStates();
     }
 
     #toggleQuote() {
@@ -916,7 +1050,10 @@ export default class TextToolbar {
             description.innerHTML = `
                 Éditeur visuel HTML léger<br>
                 100 % Vanilla JavaScript<br>
-                Sans framework
+                Sans framework<br>
+                <a href="https://github.com/crainios/Vanilla-HTML-Designer"
+                   target="_blank"
+                   rel="noopener noreferrer">GitHub</a>
             `;
 
             const credits = document.createElement('p');
@@ -1157,10 +1294,17 @@ export default class TextToolbar {
         });
 
         format.addEventListener('change', () => {
+            /*
+             * Keep the user's selected format before restoring the text
+             * selection. Restoring it can fire selectionchange, which in turn
+             * refreshes the toolbar and would otherwise reset this select to
+             * the current heading level.
+             */
+            const nextTag = format.value;
+
             this.#restoreSelection();
 
             const currentTag = this.activeEditable?.tagName?.toLowerCase();
-            const nextTag = format.value;
             const isHeadingBlock = /^h[1-6]$/.test(currentTag || '');
 
             if (isHeadingBlock && /^h[1-6]$/.test(nextTag)) {
@@ -1170,11 +1314,24 @@ export default class TextToolbar {
                         level: Number(nextTag.slice(1))
                     }
                 }));
+
+                format.value = nextTag;
+
+                requestAnimationFrame(() => {
+                    format.value = nextTag;
+                });
+
                 return;
             }
 
             document.execCommand('formatBlock', false, nextTag);
             this.#keepSelection();
+
+            format.value = nextTag;
+
+            requestAnimationFrame(() => {
+                format.value = nextTag;
+            });
         });
 
         const colorControl = document.createElement('label');
@@ -1274,22 +1431,22 @@ export default class TextToolbar {
                 {
                     label: this.t.toolbar.alignLeft,
                     icon: alignmentIcon('left'),
-                    action: () => document.execCommand('justifyLeft', false, null)
+                    action: () => this.#applyAlignment('left')
                 },
                 {
                     label: this.t.toolbar.alignCenter,
                     icon: alignmentIcon('center'),
-                    action: () => document.execCommand('justifyCenter', false, null)
+                    action: () => this.#applyAlignment('center')
                 },
                 {
                     label: this.t.toolbar.alignRight,
                     icon: alignmentIcon('right'),
-                    action: () => document.execCommand('justifyRight', false, null)
+                    action: () => this.#applyAlignment('right')
                 },
                 {
                     label: this.t.toolbar.justify,
                     icon: alignmentIcon('justify'),
-                    action: () => document.execCommand('justifyFull', false, null)
+                    action: () => this.#applyAlignment('justify')
                 }
             ],
             'alignment'
@@ -1365,6 +1522,11 @@ export default class TextToolbar {
                 this.t.toolbar.video,
                 () => this.actions.insertVideo?.(this.activeEditable),
                 videoIcon()
+            ),
+            this.#actionButton(
+                this.t.toolbar.insertCode,
+                () => this.actions.insertCode?.(this.activeEditable),
+                insertCodeIcon()
             ),
             this.#emojiDropdown(),
             this.#specialCharacterDropdown(),

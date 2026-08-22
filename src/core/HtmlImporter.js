@@ -185,6 +185,11 @@ function createImageBlock(element) {
 
 function createDividerBlock(element) {
     const block = BlockFactory.create('divider');
+    block.properties ??= {
+        color: '#9ca3af',
+        width: 1,
+        style: 'solid'
+    };
 
     if (element.style.borderTopColor) {
         block.properties.color = element.style.borderTopColor;
@@ -207,6 +212,17 @@ function createSpacerBlock(element) {
     return block;
 }
 
+function createCodeBlock(element) {
+    const block = BlockFactory.create('code');
+    const code = element.querySelector('code');
+
+    block.code = ((code || element).textContent || '')
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
+
+    return block;
+}
+
 function createButtonBlock(element) {
     const link = element.matches('a.vhd-button')
         ? element
@@ -219,6 +235,9 @@ function createButtonBlock(element) {
     const block = BlockFactory.create('button');
     block.text = link.textContent || '';
     block.url = link.getAttribute('href') || '#';
+    block.properties.target = link.getAttribute('target') === '_blank'
+        ? '_blank'
+        : '_self';
 
     if (link.style.backgroundColor) {
         block.properties.backgroundColor = link.style.backgroundColor;
@@ -325,6 +344,12 @@ function nodesToBlocks(nodes) {
         if (tag === 'hr' || element.classList.contains('vhd-divider')) {
             flushText();
             blocks.push(createDividerBlock(element));
+            continue;
+        }
+
+        if (tag === 'pre' && element.classList.contains('vhd-code')) {
+            flushText();
+            blocks.push(createCodeBlock(element));
             continue;
         }
 

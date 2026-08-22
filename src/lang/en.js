@@ -25,7 +25,8 @@ export default {
         image: 'Image',
         button: 'Button',
         divider: 'Divider',
-        spacer: 'Spacer'
+        spacer: 'Spacer',
+        code: 'Code'
     },
     toolbar: {
         fontSize: 'Font size',
@@ -55,6 +56,7 @@ export default {
         link: 'Link',
         inlineImage: 'Insert image in text',
         video: 'Insert video',
+        insertCode: 'Insert code',
         emoji: 'Insert emoji',
         specialCharacters: 'Insert special character',
         customActions: 'Custom actions',
@@ -118,6 +120,10 @@ export default {
         remove: 'Remove',
         imageUrl: 'Image URL',
         imageAlt: 'Alternative text',
+        insertCodeTitle: 'Insert code',
+        codePlaceholder: 'Paste or type your code here…',
+        insert: 'Insert',
+        cancel: 'Cancel',
         buttonText: 'Button text',
         buttonUrl: 'Button URL',
         chooseImage: 'Choose image',

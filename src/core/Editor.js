@@ -66,7 +66,8 @@ export default class Editor {
             exportHtml: () => this.#showOutput(this.getHtml()),
             preview: () => this.#showPreview(),
             insertInlineImage: editable => this.#insertInlineImage(editable),
-            insertVideo: editable => this.#insertVideo(editable)
+            insertVideo: editable => this.#insertVideo(editable),
+            insertCode: editable => this.#showInsertCodeDialog(editable)
         });
 
         this.#buildShell();
@@ -155,6 +156,108 @@ export default class Editor {
         this.#closeImageGallery();
     }
 
+    #showInsertCodeDialog(editable) {
+        const blockElement = editable?.closest?.('.vhd-block');
+        const rowIndex = Number(blockElement?.dataset.rowIndex);
+        const columnIndex = Number(blockElement?.dataset.columnIndex);
+        const blockIndex = Number(blockElement?.dataset.blockIndex);
+
+        this.pendingCodePosition = (
+            Number.isInteger(rowIndex)
+            && Number.isInteger(columnIndex)
+            && Number.isInteger(blockIndex)
+        )
+            ? { rowIndex, columnIndex, blockIndex: blockIndex + 1 }
+            : null;
+
+        if (!this.codeDialog) {
+            this.codeDialog = document.createElement('dialog');
+            this.codeDialog.className = 'vhd-code-dialog';
+
+            const form = document.createElement('form');
+            form.method = 'dialog';
+            form.className = 'vhd-code-dialog-content';
+
+            const title = document.createElement('h2');
+            title.textContent = this.t.editor.insertCodeTitle;
+
+            this.codeTextarea = document.createElement('textarea');
+            this.codeTextarea.className = 'vhd-code-dialog-textarea';
+            this.codeTextarea.rows = 14;
+            this.codeTextarea.spellcheck = false;
+            this.codeTextarea.placeholder = this.t.editor.codePlaceholder;
+
+            const actions = document.createElement('div');
+            actions.className = 'vhd-code-dialog-actions';
+
+            const cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'vhd-secondary-button';
+            cancel.textContent = this.t.editor.cancel;
+            cancel.addEventListener('click', () => this.codeDialog.close());
+
+            const insert = document.createElement('button');
+            insert.type = 'button';
+            insert.className = 'vhd-action-button';
+            insert.textContent = this.t.editor.insert;
+            insert.addEventListener('click', () => {
+                const code = this.codeTextarea.value;
+
+                if (!code.length) {
+                    this.codeTextarea.focus();
+                    return;
+                }
+
+                this.#remember();
+
+                let position = this.pendingCodePosition;
+
+                if (!position) {
+                    const fallbackRowIndex = 0;
+                    const fallbackColumnIndex = 0;
+                    const blocks = this.project.rows?.[fallbackRowIndex]?.columns?.[fallbackColumnIndex]?.blocks;
+
+                    if (!blocks) {
+                        return;
+                    }
+
+                    position = {
+                        rowIndex: fallbackRowIndex,
+                        columnIndex: fallbackColumnIndex,
+                        blockIndex: blocks.length
+                    };
+                }
+
+                const block = BlockFactory.create('code');
+                block.code = code;
+
+                this.project.rows[position.rowIndex]
+                    .columns[position.columnIndex]
+                    .blocks.splice(position.blockIndex, 0, block);
+
+                this.codeDialog.close();
+                this.codeTextarea.value = '';
+                this.pendingCodePosition = null;
+                this.render();
+            });
+
+            actions.append(cancel, insert);
+            form.append(title, this.codeTextarea, actions);
+            this.codeDialog.append(form);
+            document.body.append(this.codeDialog);
+
+            this.codeDialog.addEventListener('click', event => {
+                if (event.target === this.codeDialog) {
+                    this.codeDialog.close();
+                }
+            });
+        }
+
+        this.codeTextarea.value = '';
+        this.codeDialog.showModal();
+        requestAnimationFrame(() => this.codeTextarea.focus());
+    }
+
     #showOutput(content) {
         if (!this.outputDialog) {
             this.outputDialog = document.createElement('dialog');
@@ -178,7 +281,39 @@ export default class Editor {
         this.outputDialog.showModal();
     }
 
+    #ensureCodePreviewAssets() {
+        const contentCssUrl = '/lib/Vanilla-HTML-Designer/src/vhd-content.css';
+        const cssUrl = '/lib/Vanilla-HTML-Designer/src/vhd-code.css';
+        const jsUrl = '/lib/Vanilla-HTML-Designer/src/vhd-code.js';
+
+        if (!document.querySelector('link[data-vhd-preview-content-css]')) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = contentCssUrl;
+            link.dataset.vhdPreviewContentCss = '';
+            document.head.append(link);
+        }
+
+        if (!document.querySelector('link[data-vhd-preview-code-css]')) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = cssUrl;
+            link.dataset.vhdPreviewCodeCss = '';
+            document.head.append(link);
+        }
+
+        if (!document.querySelector('script[data-vhd-preview-code-js]')) {
+            const script = document.createElement('script');
+            script.src = jsUrl;
+            script.defer = true;
+            script.dataset.vhdPreviewCodeJs = '';
+            document.head.append(script);
+        }
+    }
+
     #showPreview() {
+        this.#ensureCodePreviewAssets();
+
         if (!this.previewDialog) {
             this.previewDialog = document.createElement('dialog');
             this.previewDialog.className = 'vhd-preview-dialog';
@@ -194,15 +329,49 @@ export default class Editor {
             this.previewContent.className = 'vhd-preview-content';
 
             this.previewDialog.append(close, this.previewContent);
+
+            this.previewDialog.addEventListener('click', event => {
+                if (event.target !== this.previewDialog) {
+                    return;
+                }
+
+                const rect = this.previewDialog.getBoundingClientRect();
+                const clickedOutside =
+                    event.clientX < rect.left ||
+                    event.clientX > rect.right ||
+                    event.clientY < rect.top ||
+                    event.clientY > rect.bottom;
+
+                if (clickedOutside) {
+                    this.previewDialog.close();
+                }
+            });
+
             document.body.append(this.previewDialog);
         }
 
         this.previewContent.innerHTML = this.getHtml();
+
+        if (window.VanillaHtmlCode?.enhance) {
+            window.VanillaHtmlCode.enhance(this.previewContent);
+        }
+
         this.previewDialog.showModal();
     }
 
     #buildShell() {
         this.root.classList.add('vhd');
+
+        if (this.options.stickyToolbar !== false) {
+            this.root.classList.add('vhd-sticky-toolbar');
+            this.root.style.setProperty(
+                '--vhd-toolbar-sticky-offset',
+                `${Math.max(0, Number(this.options.stickyToolbarOffset) || 0)}px`
+            );
+        } else {
+            this.root.classList.remove('vhd-sticky-toolbar');
+            this.root.style.removeProperty('--vhd-toolbar-sticky-offset');
+        }
 
         this.topbar = document.createElement('div');
         this.topbar.className = 'vhd-topbar';
@@ -249,7 +418,15 @@ export default class Editor {
         } else {
             input = document.createElement('input');
             input.type = type;
-            if (type === 'number') input.min = '0';
+
+            if (type === 'number') {
+                input.min = String(options?.min ?? 0);
+                input.step = String(options?.step ?? 1);
+
+                if (options?.max !== undefined) {
+                    input.max = String(options.max);
+                }
+            }
         }
 
         input.value = value;
@@ -345,9 +522,39 @@ export default class Editor {
                 this.#propertyField(this.t.properties.borderRadius,'number',target.properties.borderRadius??5,value=>{target.properties.borderRadius=Number(value); element.querySelector('a').style.borderRadius=`${value}px`;}),
                 this.#propertyField(this.t.properties.paddingHorizontal,'number',target.properties.paddingHorizontal??16,value=>{target.properties.paddingHorizontal=Number(value); element.querySelector('a').style.paddingLeft=`${value}px`; element.querySelector('a').style.paddingRight=`${value}px`;}),
                 this.#propertyField(this.t.properties.paddingVertical,'number',target.properties.paddingVertical??10,value=>{target.properties.paddingVertical=Number(value); element.querySelector('a').style.paddingTop=`${value}px`; element.querySelector('a').style.paddingBottom=`${value}px`;}),
+                this.#propertyField(
+                    this.t.properties.linkTarget,
+                    'select',
+                    target.properties.target === '_blank' ? '_blank' : '_self',
+                    value => {
+                        target.properties.target = value === '_blank' ? '_blank' : '_self';
+
+                        const link = element.querySelector('a');
+
+                        if (link) {
+                            link.target = target.properties.target;
+
+                            if (target.properties.target === '_blank') {
+                                link.rel = 'noopener noreferrer';
+                            } else {
+                                link.removeAttribute('rel');
+                            }
+                        }
+                    },
+                    [
+                        ['_self', this.t.properties.linkSameWindow],
+                        ['_blank', this.t.properties.linkNewWindow]
+                    ]
+                ),
                 this.#propertyField(this.t.properties.align,'select',target.properties.align||'left',value=>{target.properties.align=value;element.querySelector('.vhd-button-editor').style.textAlign=value;},[['left',this.t.properties.left],['center',this.t.properties.center],['right',this.t.properties.right]])
             );
         } else if (target.type === 'divider') {
+            target.properties ??= {
+                color: '#9ca3af',
+                width: 1,
+                style: 'solid'
+            };
+
             panel.append(
                 this.#propertyField(this.t.properties.dividerColor,'color',target.properties.color||'#9ca3af',value=>{target.properties.color=value;element.querySelector('hr').style.borderTopColor=value;}),
                 this.#propertyField(this.t.properties.dividerWidth,'number',target.properties.width??1,value=>{target.properties.width=Number(value);element.querySelector('hr').style.borderTopWidth=`${value}px`;}),
@@ -358,8 +565,28 @@ export default class Editor {
         } else if (target.type === 'text' || target.type === 'heading') {
             panel.append(
                 this.#propertyField(this.t.properties.textColor,'color',target.properties.color||'#1f2937',value=>{target.properties.color=value; const editable=element.querySelector('[contenteditable]'); if(editable) editable.style.color=value;}),
-                this.#propertyField(this.t.properties.lineHeight,'number',target.properties.lineHeight??1.5,value=>{target.properties.lineHeight=Number(value); const editable=element.querySelector('[contenteditable]'); if(editable) editable.style.lineHeight=value;}),
-                this.#propertyField(this.t.properties.letterSpacing,'number',target.properties.letterSpacing??0,value=>{target.properties.letterSpacing=Number(value); const editable=element.querySelector('[contenteditable]'); if(editable) editable.style.letterSpacing=`${value}px`;})
+                this.#propertyField(
+                    this.t.properties.lineHeight,
+                    'number',
+                    target.properties.lineHeight ?? 1.5,
+                    value => {
+                        target.properties.lineHeight = Number(value);
+                        const editable = element.querySelector('[contenteditable]');
+                        if (editable) editable.style.lineHeight = value;
+                    },
+                    { min: 0.5, max: 5, step: 0.1 }
+                ),
+                this.#propertyField(
+                    this.t.properties.letterSpacing,
+                    'number',
+                    target.properties.letterSpacing ?? 0,
+                    value => {
+                        target.properties.letterSpacing = Number(value);
+                        const editable = element.querySelector('[contenteditable]');
+                        if (editable) editable.style.letterSpacing = `${value}px`;
+                    },
+                    { min: 0, step: 0.1 }
+                )
             );
         }
     }
@@ -1131,11 +1358,17 @@ export default class Editor {
     #renderBlock(block, rowIndex, columnIndex, blockIndex) {
         const wrapper = document.createElement('div');
         wrapper.className = `vhd-block vhd-block-${block.type}`;
+        wrapper.dataset.rowIndex = String(rowIndex);
+        wrapper.dataset.columnIndex = String(columnIndex);
+        wrapper.dataset.blockIndex = String(blockIndex);
         wrapper.append(this.#blockControls(rowIndex, columnIndex, blockIndex));
 
         if (block.type === 'heading') {
             const heading = document.createElement(`h${block.level || 2}`);
             heading.innerHTML = block.content || '';
+            heading.style.color = block.properties?.color || '#1f2937';
+            heading.style.lineHeight = String(block.properties?.lineHeight ?? 1.2);
+            heading.style.letterSpacing = `${block.properties?.letterSpacing ?? 0}px`;
             this.#editable(heading, block, 'content');
             wrapper.append(heading);
         }
@@ -1144,6 +1377,9 @@ export default class Editor {
             const text = document.createElement('div');
             text.className = 'vhd-editable-text';
             text.innerHTML = block.content || '';
+            text.style.color = block.properties?.color || '#1f2937';
+            text.style.lineHeight = String(block.properties?.lineHeight ?? 1.5);
+            text.style.letterSpacing = `${block.properties?.letterSpacing ?? 0}px`;
             this.#editable(text, block, 'content');
             wrapper.append(text);
         }
@@ -1176,7 +1412,14 @@ export default class Editor {
             }
 
             const url = document.createElement('input');
-            url.type = 'url';
+            /*
+             * Use a text field rather than type="url": HTML URL inputs
+             * reject valid application-relative paths such as
+             * /bt-content/1/images/example.webp.
+             */
+            url.type = 'text';
+            url.inputMode = 'url';
+            url.autocomplete = 'url';
             url.placeholder = this.t.editor.imageUrl;
             url.value = block.src || '';
             url.addEventListener('change', () => {
@@ -1237,6 +1480,12 @@ export default class Editor {
             const preview = document.createElement('a');
             preview.className = 'vhd-preview-button';
             preview.href = block.url || '#';
+            preview.target = block.properties?.target === '_blank' ? '_blank' : '_self';
+
+            if (preview.target === '_blank') {
+                preview.rel = 'noopener noreferrer';
+            }
+
             preview.textContent = block.text || 'Button';
             preview.style.backgroundColor = block.properties?.backgroundColor || '#2563eb';
             preview.style.color = block.properties?.color || '#ffffff';
@@ -1266,6 +1515,22 @@ export default class Editor {
             });
 
             editor.append(preview, text, url);
+            wrapper.append(editor);
+        }
+
+        if (block.type === 'code') {
+            const editor = document.createElement('textarea');
+            editor.className = 'vhd-code-editor';
+            editor.spellcheck = false;
+            editor.rows = Math.max(5, Math.min(18, String(block.code || '').split('\n').length + 1));
+            editor.value = block.code || '';
+            editor.placeholder = this.t.editor.codePlaceholder;
+
+            editor.addEventListener('input', () => {
+                block.code = editor.value;
+                editor.rows = Math.max(5, Math.min(18, editor.value.split('\n').length + 1));
+            });
+
             wrapper.append(editor);
         }
 

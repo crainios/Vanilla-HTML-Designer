@@ -1,32 +1,33 @@
 .gitignore
 CHANGELOG.md
 LICENSE
+PROJECT-TREE.txt
 README.md
-demo/
-    index.html
-docs/
-    api.md
-    project-format.md
+demo/index.html
+docs/api.md
+docs/project-format.md
 package.json
-src/
-    HtmlDesigner.js
-    blocks/
-        BlockFactory.js
-        ButtonBlock.js
-        DividerBlock.js
-        HeadingBlock.js
-        ImageBlock.js
-        SpacerBlock.js
-        TextBlock.js
-    core/
-        Editor.js
-        History.js
-        Serializer.js
-    html-designer.css
-    lang/
-        en.js
-        fr.js
-    layout/
-        Grid.js
-    toolbar/
-        TextToolbar.js
+src/HtmlDesigner.js
+src/blocks/BlockFactory.js
+src/blocks/ButtonBlock.js
+src/blocks/CodeBlock.js
+src/blocks/DividerBlock.js
+src/blocks/HeadingBlock.js
+src/blocks/ImageBlock.js
+src/blocks/SpacerBlock.js
+src/blocks/TextBlock.js
+src/core/Editor.js
+src/core/History.js
+src/core/HtmlImporter.js
+src/core/Serializer.js
+src/html-designer.css
+src/lang/en.js
+src/lang/fr.js
+src/layout/Grid.js
+src/toolbar/EmojiData.js
+src/toolbar/SpecialCharacterData.js
+src/toolbar/TextToolbar.js
+src/version.js
+src/vhd-code.css
+src/vhd-code.js
+src/vhd-content.css

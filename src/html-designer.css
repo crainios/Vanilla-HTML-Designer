@@ -1054,11 +1054,13 @@
 
 .vhd-properties {
     position: sticky;
-    top: 62px;
+    top: calc(var(--vhd-toolbar-sticky-offset, 0px) + 62px);
     padding: 12px;
     background: var(--vhd-surface);
     border: 1px solid var(--vhd-border);
     border-radius: var(--vhd-radius);
+    max-height: calc(100vh - var(--vhd-toolbar-sticky-offset, 0px) - 74px);
+    overflow-y: auto;
 }
 
 .vhd-properties h3 {
@@ -1685,4 +1687,156 @@
     right: 0;
     left: auto;
     transform: none;
+}
+
+
+/* 0.6.24 — code blocks */
+.vhd-code-editor {
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    min-height: 120px;
+    padding: 16px;
+    resize: vertical;
+    border: 1px solid var(--vhd-border);
+    border-radius: 6px;
+    background: #f6f5f3;
+    color: #111827;
+    font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    white-space: pre;
+    tab-size: 4;
+}
+
+.vhd-code-editor:focus {
+    border-color: var(--vhd-accent);
+    outline: 2px solid rgba(37, 99, 235, .12);
+}
+
+.vhd-code-dialog {
+    box-sizing: border-box;
+    width: min(760px, calc(100% - 32px));
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .22);
+}
+
+.vhd-code-dialog::backdrop {
+    background: rgba(0, 0, 0, .35);
+}
+
+.vhd-code-dialog-content {
+    display: grid;
+    gap: 14px;
+    padding: 22px;
+}
+
+.vhd-code-dialog-content h2 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.vhd-code-dialog-textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 280px;
+    padding: 14px;
+    resize: vertical;
+    border: 1px solid var(--vhd-border);
+    border-radius: 6px;
+    background: #f6f5f3;
+    color: #111827;
+    font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    tab-size: 4;
+}
+
+.vhd-code-dialog-textarea:focus {
+    border-color: var(--vhd-accent);
+    outline: 2px solid rgba(37, 99, 235, .12);
+}
+
+.vhd-code-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+
+/* 0.6.32 — blockquote presentation */
+.vhd-editable-text blockquote,
+.vhd-preview-content blockquote,
+.vhd-content blockquote {
+    position: relative;
+    margin: 1.25em 0 1.25em 2em;
+    padding: 1em 1.25em 1em 2.9em;
+    border: 1px solid #d8dde5;
+    border-left: 4px solid #9ca3af;
+    border-radius: 6px;
+    background: #f7f8fa;
+    color: inherit;
+}
+
+.vhd-editable-text blockquote::before,
+.vhd-preview-content blockquote::before,
+.vhd-content blockquote::before {
+    content: "❝";
+    position: absolute;
+    top: .25em;
+    left: .45em;
+    color: #9ca3af;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 2.4em;
+    font-weight: 700;
+    line-height: 1;
+    opacity: .9;
+    pointer-events: none;
+}
+
+.vhd-editable-text blockquote::after,
+.vhd-preview-content blockquote::after,
+.vhd-content blockquote::after {
+    content: "❞";
+    position: absolute;
+    right: .45em;
+    bottom: .15em;
+    color: #c2c7cf;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 2em;
+    font-weight: 700;
+    line-height: 1;
+    opacity: .65;
+    pointer-events: none;
+}
+
+.vhd-editable-text blockquote > :first-child,
+.vhd-preview-content blockquote > :first-child,
+.vhd-content blockquote > :first-child {
+    margin-top: 0;
+}
+
+.vhd-editable-text blockquote > :last-child,
+.vhd-preview-content blockquote > :last-child,
+.vhd-content blockquote > :last-child {
+    margin-bottom: 0;
+}
+
+
+/* 0.6.34 — sticky toolbar for long documents */
+.vhd.vhd-sticky-toolbar .vhd-text-toolbar {
+    position: sticky;
+    top: var(--vhd-toolbar-sticky-offset, 0px);
+    z-index: 120;
+    background: var(--vhd-surface, #fff);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .06);
+}
+
+.vhd.vhd-sticky-toolbar .vhd-text-toolbar::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 1px;
+    background: var(--vhd-border, #e5e7eb);
+    pointer-events: none;
 }

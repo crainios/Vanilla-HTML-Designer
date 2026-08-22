@@ -8,7 +8,8 @@ export default function createButtonBlock() {
             borderRadius: 5,
             paddingHorizontal: 16,
             paddingVertical: 10,
-            align: 'left'
+            align: 'left',
+            target: '_self'
         },
         text: 'Button',
         url: '#',

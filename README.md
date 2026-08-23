@@ -511,3 +511,413 @@ images, inline media, buttons, dividers, spacers, citations and imported tables.
 Without this stylesheet, CSS-grid variables such as `--vhd-grid-units` and `--vhd-span`
 remain present in the HTML but the browser has no rule telling `.vhd-row` and `.vhd-col`
 how to use them.
+
+
+## Disabling toolbar buttons
+
+Toolbar controls can be hidden at initialization with `disabledToolbarButtons`.
+The About / Vanilla HTML Designer identity button is always displayed and cannot be disabled.
+
+```js
+const editor = new HtmlDesigner('#htmlDesigner', {
+    disabledToolbarButtons: [
+        'undo',
+        'redo',
+        'clearFormatting',
+        'code',
+        'emoji',
+        'exportJson'
+    ]
+});
+```
+
+Available keys:
+
+```text
+undo
+redo
+clearFormatting
+bold
+italic
+underline
+strike
+textColor
+backgroundColor
+fontFamily
+fontSize
+link
+inlineImage
+video
+code
+emoji
+specialCharacters
+paragraph
+lists
+quote
+alignment
+customActions
+exportJson
+exportHtml
+preview
+fullscreen
+```
+
+Unknown keys are ignored. Separators are automatically cleaned up when adjacent controls are hidden.
+
+
+## Disabling “Add content” block types
+
+The items offered by the `+` **Add content** menu can be hidden at initialization with
+`disabledContentBlocks`.
+
+```js
+const editor = new HtmlDesigner('#htmlDesigner', {
+    disabledContentBlocks: [
+        'image',
+        'button',
+        'code'
+    ]
+});
+```
+
+Available block keys:
+
+```text
+heading
+text
+image
+button
+divider
+spacer
+code
+```
+
+The `+` button remains visible as long as at least one content type is available.
+If all content types are disabled, the `+` **Add content** control is hidden automatically.
+
+This option affects the manual **Add content** menu. Existing blocks already present in
+loaded JSON/HTML are preserved and remain editable.
+
+
+## Disabling section layouts
+
+The layouts offered by the `+` **Add section** control can be filtered with `disabledSections`.
+
+```js
+const editor = new HtmlDesigner('#htmlDesigner', {
+    disabledSections: [
+        'five',
+        'six'
+    ]
+});
+```
+
+Available section keys:
+
+```text
+one
+twoEqual
+twoWideLeft
+twoWideRight
+three
+four
+five
+six
+```
+
+They correspond to:
+
+```text
+one          → 1 column
+twoEqual     → 1/2 + 1/2
+twoWideLeft  → 2/3 + 1/3
+twoWideRight → 1/3 + 2/3
+three        → 3 columns
+four         → 4 columns
+five         → 5 columns
+six          → 6 columns
+```
+
+If all section layouts are disabled, the `+ Add section` control is hidden automatically.
+
+This setting only affects the creation of new sections. Existing sections loaded from JSON/HTML are preserved.
+
+
+## Properties-driven editing
+
+Visual blocks now follow a consistent editing model:
+
+- Heading, Text and Code content is edited directly in the canvas.
+- Image source, gallery selection, alternative text and presentation settings are edited in the Properties panel.
+- Button text, URL, target and presentation settings are edited in the Properties panel.
+- Divider and Spacer settings are edited in the Properties panel.
+- The canvas therefore stays close to the final public rendering instead of displaying technical form fields inside content blocks.
+
+
+## Fullscreen mode
+
+The toolbar includes a **Fullscreen** button immediately after **Preview**.
+
+- Click once to expand the editor to the whole viewport.
+- Click again to restore the normal layout.
+- Press `Escape` to leave fullscreen mode.
+- Page scrolling is temporarily disabled while the editor is fullscreen.
+- The fullscreen toolbar button can be hidden with `disabledToolbarButtons: ['fullscreen']`.
+- The About button remains always available.
+
+
+## Status message API
+
+Vanilla HTML Designer exposes a public `setStatus()` method for displaying a discreet
+application-level message in the Properties panel, directly under the document statistics.
+
+```js
+editor.setStatus('Sauvegarde…', 'info');
+
+editor.setStatus(
+    'Sauvegardé automatiquement à 10:48',
+    'success'
+);
+
+editor.setStatus(
+    'Échec de la sauvegarde automatique',
+    'error'
+);
+```
+
+Supported types: `info`, `success`, `error`.
+
+Clear the status with:
+
+```js
+editor.setStatus('');
+```
+
+The status API is generic and independent of autosave.
+
+
+## Render JSON without creating an editor
+
+`HtmlDesigner.renderJson()` converts a Vanilla HTML Designer project directly to its final HTML
+without creating a visible editor and without modifying an existing editor instance.
+
+It accepts either the JSON string stored in the database:
+
+```js
+const html = HtmlDesigner.renderJson(ges_co_tarif_json);
+
+document.querySelector('#autosavePreview').innerHTML = html;
+```
+
+or an already parsed project object:
+
+```js
+const project = JSON.parse(ges_co_tarif_json);
+const html = HtmlDesigner.renderJson(project);
+```
+
+For the public presentation styles, include:
+
+```html
+<link rel="stylesheet" href="/lib/Vanilla-HTML-Designer/src/vhd-content.css">
+```
+
+Invalid JSON or an object that is not a VHD project throws an explicit error.
+
+
+## Compact toolbar style
+
+Since version 0.6.49, the main toolbar uses a compact borderless presentation:
+light grey background, tighter spacing, and subtle hover/active states.
+
+
+## Find / Replace
+
+The toolbar includes a **Find / Replace** command after Clear formatting.
+
+It searches all Heading, Text and Code blocks in the current document.
+
+Features:
+
+- Previous / Next result navigation
+- `Enter` for next result and `Shift+Enter` for previous
+- Replace current occurrence
+- Replace all occurrences
+- Optional case-sensitive search
+- Preserves the HTML structure of Heading and Text blocks while replacing text
+- Code blocks are searched and replaced as plain text
+- The command can be hidden with `disabledToolbarButtons: ['searchReplace']`
+
+The search intentionally targets document text only. Image URLs, alternative text, button
+URLs and other block properties are not included.
+
+
+## Superscript, subscript and indentation
+
+The character toolbar includes compact `x²` and `x₂` controls for semantic
+`<sup>` and `<sub>` formatting.
+
+The Alignment dropdown also contains:
+
+- Decrease indent
+- Increase indent
+
+Indentation uses the browser editing model so it works with paragraphs and list
+items while preserving the current selection.
+
+These controls can be hidden independently:
+
+```js
+disabledToolbarButtons: [
+    'superscript',
+    'subscript',
+    'indent',
+    'outdent'
+]
+```
+
+
+### Indentation behavior
+
+Since 0.6.52, paragraph and heading indentation is independent from Citation:
+it uses `margin-left` in 2rem steps and never creates a `<blockquote>`.
+List indentation remains structural so nested lists continue to use semantic list markup.
+
+
+## Grouped secondary formatting
+
+Since 0.6.53 the main character toolbar keeps the most common controls directly visible:
+
+- Bold
+- Italic
+- Underline
+- Font family
+- Font size
+
+Less frequent formatting commands are grouped in **More formatting**:
+
+- Strike
+- Superscript
+- Subscript
+- Text color
+- Text background color
+
+The existing `disabledToolbarButtons` keys for these commands remain valid and are
+applied inside the dropdown.
+
+
+## Visual image resizing
+
+Since 0.6.54, Image blocks can be resized directly in the canvas by dragging
+the handles displayed on the left and right edges of the selected/hovered image.
+
+- Aspect ratio is preserved.
+- Width remains percentage-based and is constrained to 5–100%.
+- The Width field in Properties is synchronized while dragging.
+- Alignment (left, center, right) is preserved.
+- The existing numeric Width property remains available for precise values.
+
+
+## Block drag and drop
+
+Since 0.6.55, content blocks can be moved using the dedicated `⋮⋮` handle shown
+with the existing block controls.
+
+A block can be dropped:
+
+- before or after another block in the same column;
+- into another column;
+- into a column belonging to another zone;
+- into an empty column.
+
+A thin insertion marker shows the exact target position. The operation uses
+Pointer Events and therefore supports mouse, pen and touch input. Dragging
+changes only the order/location of the existing block object; the project JSON
+format is unchanged. Undo/Redo records each completed move.
+
+The Up and Down buttons remain available.
+
+
+### Drag implementation note
+
+Version 0.6.56 replaces the first drag implementation with document-level Pointer
+Events and a lightweight drag preview. No full block clone is created while moving,
+which keeps editing responsive on complex blocks.
+
+
+### Drag auto-scroll
+
+Since 0.6.57, dragging a block near the top or bottom edge of the viewport
+automatically scrolls the document. The closer the pointer is to the edge, the
+faster the scroll. In fullscreen mode, the editor canvas is scrolled instead of
+the page.
+
+
+### Continuous target tracking during auto-scroll
+
+Since 0.6.58, the drop position is recalculated on every auto-scroll frame. This
+allows a block to cross very tall content in both directions even when the
+pointer remains stationary near the top or bottom edge. Auto-scroll is also
+slightly faster than in 0.6.57.
+
+
+### Same-column downward drag
+
+Version 0.6.59 fixes an index calculation error affecting downward moves in the
+same column. Drop positions are calculated from a list that excludes the source
+block, so the destination index must not be decremented again before insertion.
+
+
+### Canvas presentation
+
+Since 0.6.60, the editor canvas no longer adds a grey background or outer padding
+around content zones. Zones are displayed directly against the editor background.
+
+
+### Editor-only column background
+
+Since 0.6.61, the light grey `#fafbfc` visible in editor columns is purely an
+editing aid. It is not stored as the default column background and is not
+exported to public HTML. A `background-color` is exported only after the user
+explicitly chooses a column background.
+
+Legacy projects containing the former automatic `#fafbfc` value are normalized
+to transparent when loaded.
+
+
+## Zone drag and drop
+
+Since 0.6.62, complete zones can be reordered vertically using the dedicated
+`⋮⋮` handle in the zone controls. The entire zone moves as one unit, including
+its column layout, column properties and all content blocks.
+
+The drag includes:
+
+- a precise insertion marker;
+- automatic edge scrolling;
+- mouse, pen and touch support through Pointer Events;
+- Undo/Redo support.
+
+Horizontal column dragging is intentionally not implemented: zone dragging only
+changes the vertical order of complete zones.
+
+
+### Faster drag auto-scroll
+
+Since 0.6.63, automatic scrolling during block and zone dragging is substantially
+faster. The scroll speed now ranges from 8px to 44px per animation frame while
+remaining progressive according to the pointer distance from the viewport edge.
+
+
+### Simplified movement controls
+
+Since 0.6.64, the legacy Up/Down buttons have been removed from both block and
+zone controls. Drag-and-drop is the primary movement mechanism.
+
+Controls are now:
+
+```text
+⋮⋮   ×
+```
+
+The first zone still keeps its Add Zone control.

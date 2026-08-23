@@ -2,6 +2,23 @@ import { VERSION } from '../version.js';
 import emojiCategories from './EmojiData.js';
 import specialCharacterCategories from './SpecialCharacterData.js';
 
+function indentIcon(type) {
+    const arrow = type === 'outdent'
+        ? '<path d="M10 9 6 12l4 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
+        : '<path d="m6 9 4 3-4 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+
+    return `
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+            ${arrow}
+            <path d="M13 7h7M13 12h7M13 17h7"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"/>
+        </svg>
+    `;
+}
+
 function alignmentIcon(type) {
     const widths = {
         left: [15, 11, 15, 8],
@@ -124,6 +141,23 @@ function insertCodeIcon() {
 }
 
 
+function searchReplaceIcon() {
+    return `
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+            <circle cx="10.5" cy="10.5" r="5.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"/>
+            <path d="M14.5 14.5 20 20M4 20h7M8.5 17.5 11 20l-2.5 2.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"/>
+        </svg>
+    `;
+}
+
 function previewIcon() {
     return `
         <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
@@ -132,6 +166,20 @@ function previewIcon() {
         </svg>
     `;
 }
+
+function fullscreenIcon() {
+    return `
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+            <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"/>
+        </svg>
+    `;
+}
+
 
 
 function inlineImageIcon() {
@@ -160,6 +208,11 @@ export default class TextToolbar {
         this.actions = actions;
         this.defaultFontFamily = actions.defaultFontFamily || 'system-ui';
         this.customButtons = Array.isArray(actions.customButtons) ? actions.customButtons : [];
+        this.disabledToolbarButtons = new Set(
+            Array.isArray(actions.disabledToolbarButtons)
+                ? actions.disabledToolbarButtons.map(value => String(value))
+                : []
+        );
         this.activeEditable = null;
         this.commandButtons = new Map();
         this.alignmentTrigger = null;
@@ -197,6 +250,53 @@ export default class TextToolbar {
         });
     }
 
+    #toolbarItem(key, element) {
+        if (!(element instanceof HTMLElement)) {
+            return element;
+        }
+
+        element.dataset.vhdToolbarKey = key;
+
+        if (this.disabledToolbarButtons.has(key)) {
+            element.hidden = true;
+        }
+
+        return element;
+    }
+
+    #cleanupToolbarSeparators() {
+        const children = Array.from(this.element.children);
+
+        const isVisibleItem = element =>
+            !element.hidden
+            && !element.classList.contains('vhd-toolbar-separator');
+
+        children.forEach((element, index) => {
+            if (!element.classList.contains('vhd-toolbar-separator')) {
+                return;
+            }
+
+            const hasVisibleBefore = children
+                .slice(0, index)
+                .reverse()
+                .some(isVisibleItem);
+
+            const hasVisibleAfter = children
+                .slice(index + 1)
+                .some(isVisibleItem);
+
+            const previousVisible = children
+                .slice(0, index)
+                .reverse()
+                .find(element => !element.hidden);
+
+            element.hidden =
+                !hasVisibleBefore
+                || !hasVisibleAfter
+                || previousVisible?.classList.contains('vhd-toolbar-separator');
+        });
+    }
+
     #button(label, command, value = null, html = null) {
         const button = document.createElement('button');
         button.type = 'button';
@@ -210,7 +310,16 @@ export default class TextToolbar {
             button.textContent = label;
         }
 
-        if (['bold', 'italic', 'underline', 'strikeThrough'].includes(command)) {
+        if (
+            [
+                'bold',
+                'italic',
+                'underline',
+                'strikeThrough',
+                'superscript',
+                'subscript'
+            ].includes(command)
+        ) {
             this.commandButtons.set(command, button);
         }
 
@@ -261,6 +370,127 @@ export default class TextToolbar {
         separator.className = 'vhd-toolbar-separator';
         separator.setAttribute('aria-hidden', 'true');
         return separator;
+    }
+
+
+    #additionalFormattingDropdown(colorControl, backgroundColorControl) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'vhd-toolbar-dropdown';
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'vhd-toolbar-button vhd-toolbar-dropdown-trigger';
+        trigger.title = this.t.toolbar.moreFormatting;
+        trigger.setAttribute('aria-label', this.t.toolbar.moreFormatting);
+        trigger.setAttribute('aria-haspopup', 'true');
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.innerHTML = `
+            <span class="vhd-toolbar-more-format-icon">A</span>
+            <span class="vhd-toolbar-caret">▾</span>
+        `;
+
+        const menu = document.createElement('div');
+        menu.className = 'vhd-toolbar-menu vhd-toolbar-formatting-menu';
+        menu.hidden = true;
+
+        const addCommand = (key, label, command, icon) => {
+            if (this.disabledToolbarButtons.has(key)) {
+                return;
+            }
+
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'vhd-toolbar-menu-item';
+            button.title = label;
+            button.setAttribute('aria-label', label);
+            button.innerHTML = `
+                <span class="vhd-toolbar-menu-icon">${icon}</span>
+                <span>${label}</span>
+            `;
+
+            this.commandButtons.set(command, button);
+
+            button.addEventListener('mousedown', event => {
+                this.#saveSelection();
+                event.preventDefault();
+                this.#restoreSelection();
+                document.execCommand(command, false, null);
+                this.#keepSelection();
+                this.#closeMenus();
+            });
+
+            menu.append(button);
+        };
+
+        addCommand(
+            'strike',
+            this.t.toolbar.strike,
+            'strikeThrough',
+            '<s>S</s>'
+        );
+
+        addCommand(
+            'superscript',
+            this.t.toolbar.superscript,
+            'superscript',
+            '<span class="vhd-toolbar-script-icon">x<sup>2</sup></span>'
+        );
+
+        addCommand(
+            'subscript',
+            this.t.toolbar.subscript,
+            'subscript',
+            '<span class="vhd-toolbar-script-icon">x<sub>2</sub></span>'
+        );
+
+        const addColor = (key, label, control) => {
+            if (this.disabledToolbarButtons.has(key)) {
+                return;
+            }
+
+            const row = document.createElement('div');
+            row.className = 'vhd-toolbar-menu-item vhd-toolbar-menu-color-item';
+
+            const icon = document.createElement('span');
+            icon.className = 'vhd-toolbar-menu-icon';
+
+            const sourceSvg = control.querySelector('svg');
+            if (sourceSvg) {
+                icon.append(sourceSvg.cloneNode(true));
+            }
+
+            const text = document.createElement('span');
+            text.textContent = label;
+
+            control.classList.add('vhd-toolbar-color-control-menu');
+
+            row.append(icon, text, control);
+            menu.append(row);
+        };
+
+        addColor('textColor', this.t.toolbar.color, colorControl);
+        addColor('backgroundColor', this.t.toolbar.backgroundColor, backgroundColorControl);
+
+        trigger.addEventListener('mousedown', event => {
+            this.#saveSelection();
+            event.preventDefault();
+
+            const willOpen = menu.hidden;
+            this.#closeMenus();
+
+            if (willOpen) {
+                menu.hidden = false;
+                trigger.setAttribute('aria-expanded', 'true');
+            }
+        });
+
+        wrapper.append(trigger, menu);
+
+        if (!menu.children.length) {
+            wrapper.hidden = true;
+        }
+
+        return wrapper;
     }
 
 
@@ -388,6 +618,133 @@ export default class TextToolbar {
         selection.addRange(range);
 
         editable.focus();
+    }
+
+    #applyIndent(command) {
+        if (
+            !(this.activeEditable instanceof HTMLElement)
+            || !['indent', 'outdent'].includes(command)
+        ) {
+            return;
+        }
+
+        if (!this.#restoreSelection()) {
+            return;
+        }
+
+        const selection = window.getSelection();
+
+        if (!selection || selection.rangeCount === 0) {
+            return;
+        }
+
+        const range = selection.getRangeAt(0);
+        const blockSelector = 'p,div,li,h1,h2,h3,h4,h5,h6';
+        const targets = [];
+
+        const addTarget = element => {
+            if (
+                element instanceof HTMLElement
+                && this.activeEditable.contains(element)
+                && !targets.includes(element)
+            ) {
+                targets.push(element);
+            }
+        };
+
+        const closestBlock = node => {
+            const element = node?.nodeType === Node.TEXT_NODE
+                ? node.parentElement
+                : node;
+
+            if (!(element instanceof HTMLElement)) {
+                return null;
+            }
+
+            if (element === this.activeEditable) {
+                return this.activeEditable;
+            }
+
+            return element.closest(blockSelector);
+        };
+
+        const startBlock = closestBlock(range.startContainer);
+        const endBlock = closestBlock(range.endContainer);
+
+        if (
+            startBlock instanceof HTMLLIElement
+            || endBlock instanceof HTMLLIElement
+        ) {
+            document.execCommand(command, false, null);
+
+            this.activeEditable.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                inputType: command === 'indent'
+                    ? 'formatIndent'
+                    : 'formatOutdent',
+                data: null
+            }));
+
+            this.#keepSelection();
+            return;
+        }
+
+        if (range.collapsed) {
+            addTarget(startBlock);
+        } else {
+            const candidates = this.activeEditable.querySelectorAll(blockSelector);
+
+            candidates.forEach(element => {
+                try {
+                    if (range.intersectsNode(element)) {
+                        addTarget(element);
+                    }
+                } catch (error) {
+                    // Ignore nodes that cannot be intersected by the current range.
+                }
+            });
+
+            if (!targets.length) {
+                addTarget(startBlock);
+                addTarget(endBlock);
+            }
+        }
+
+        if (!targets.length) {
+            addTarget(this.activeEditable);
+        }
+
+        const step = 2;
+
+        targets.forEach(element => {
+            const current = Number.parseFloat(
+                element.style.marginLeft || getComputedStyle(element).marginLeft || '0'
+            ) || 0;
+
+            const currentRem = current / (
+                Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+            );
+
+            const next = command === 'indent'
+                ? currentRem + step
+                : Math.max(0, currentRem - step);
+
+            if (next <= 0) {
+                element.style.removeProperty('margin-left');
+            } else {
+                element.style.marginLeft = `${next}rem`;
+            }
+        });
+
+        this.activeEditable.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: command === 'indent'
+                ? 'formatIndent'
+                : 'formatOutdent',
+            data: null
+        }));
+
+        this.#keepSelection();
     }
 
     #applyAlignment(alignment) {
@@ -1376,6 +1733,11 @@ export default class TextToolbar {
         });
         backgroundColorControl.append(backgroundColor);
 
+        const additionalFormatting = this.#additionalFormattingDropdown(
+            colorControl,
+            backgroundColorControl
+        );
+
         const lists = this.#dropdown(
             this.t.toolbar.lists,
             listIcon(false),
@@ -1447,7 +1809,25 @@ export default class TextToolbar {
                     label: this.t.toolbar.justify,
                     icon: alignmentIcon('justify'),
                     action: () => this.#applyAlignment('justify')
-                }
+                },
+                ...(
+                    this.disabledToolbarButtons.has('outdent')
+                        ? []
+                        : [{
+                            label: this.t.toolbar.outdent,
+                            icon: indentIcon('outdent'),
+                            action: () => this.#applyIndent('outdent')
+                        }]
+                ),
+                ...(
+                    this.disabledToolbarButtons.has('indent')
+                        ? []
+                        : [{
+                            label: this.t.toolbar.indent,
+                            icon: indentIcon('indent'),
+                            action: () => this.#applyIndent('indent')
+                        }]
+                )
             ],
             'alignment'
         );
@@ -1481,8 +1861,8 @@ export default class TextToolbar {
         const versionBadge = document.createElement('button');
         versionBadge.type = 'button';
         versionBadge.className = 'vhd-version-badge';
-        versionBadge.title = `Vanilla HTML Designer — version ${VERSION}`;
-        versionBadge.setAttribute('aria-label', `À propos de Vanilla HTML Designer — version ${VERSION}`);
+        versionBadge.title = 'À propos de Vanilla HTML Designer';
+        versionBadge.setAttribute('aria-label', 'À propos de Vanilla HTML Designer');
         versionBadge.innerHTML = `
             <svg viewBox="0 0 64 40" aria-hidden="true" focusable="false">
                 <path d="M14 8 4 20l10 12"></path>
@@ -1495,73 +1875,115 @@ export default class TextToolbar {
 
         this.element.append(
             // History / reset
-            undoButton,
-            redoButton,
-            clearFormattingButton,
+            this.#toolbarItem('undo', undoButton),
+            this.#toolbarItem('redo', redoButton),
+            this.#toolbarItem('clearFormatting', clearFormattingButton),
+            this.#toolbarItem(
+                'searchReplace',
+                this.#actionButton(
+                    this.t.toolbar.searchReplace,
+                    () => this.actions.searchReplace?.(),
+                    searchReplaceIcon()
+                )
+            ),
             this.#separator(),
 
             // Character formatting
-            this.#button(this.t.toolbar.bold, 'bold', null, '<strong>B</strong>'),
-            this.#button(this.t.toolbar.italic, 'italic', null, '<em>I</em>'),
-            this.#button(this.t.toolbar.underline, 'underline', null, '<u>U</u>'),
-            this.#button(this.t.toolbar.strike, 'strikeThrough', null, '<s>S</s>'),
-            colorControl,
-            backgroundColorControl,
-            fontFamily,
-            fontSize,
+            this.#toolbarItem('bold', this.#button(this.t.toolbar.bold, 'bold', null, '<strong>B</strong>')),
+            this.#toolbarItem('italic', this.#button(this.t.toolbar.italic, 'italic', null, '<em>I</em>')),
+            this.#toolbarItem('underline', this.#button(this.t.toolbar.underline, 'underline', null, '<u>U</u>')),
+            this.#toolbarItem('moreFormatting', additionalFormatting),
+            this.#toolbarItem('fontFamily', fontFamily),
+            this.#toolbarItem('fontSize', fontSize),
             this.#separator(),
 
             // Insertion
-            this.linkButton = this.#button(this.t.toolbar.link, 'createLink', null, '🔗'),
-            this.#actionButton(
-                this.t.toolbar.inlineImage,
-                () => this.actions.insertInlineImage?.(this.activeEditable),
-                inlineImageIcon()
+            this.#toolbarItem(
+                'link',
+                this.linkButton = this.#button(this.t.toolbar.link, 'createLink', null, '🔗')
             ),
-            this.#actionButton(
-                this.t.toolbar.video,
-                () => this.actions.insertVideo?.(this.activeEditable),
-                videoIcon()
+            this.#toolbarItem(
+                'inlineImage',
+                this.#actionButton(
+                    this.t.toolbar.inlineImage,
+                    () => this.actions.insertInlineImage?.(this.activeEditable),
+                    inlineImageIcon()
+                )
             ),
-            this.#actionButton(
-                this.t.toolbar.insertCode,
-                () => this.actions.insertCode?.(this.activeEditable),
-                insertCodeIcon()
+            this.#toolbarItem(
+                'video',
+                this.#actionButton(
+                    this.t.toolbar.video,
+                    () => this.actions.insertVideo?.(this.activeEditable),
+                    videoIcon()
+                )
             ),
-            this.#emojiDropdown(),
-            this.#specialCharacterDropdown(),
+            this.#toolbarItem(
+                'code',
+                this.#actionButton(
+                    this.t.toolbar.insertCode,
+                    () => this.actions.insertCode?.(this.activeEditable),
+                    insertCodeIcon()
+                )
+            ),
+            this.#toolbarItem('emoji', this.#emojiDropdown()),
+            this.#toolbarItem('specialCharacters', this.#specialCharacterDropdown()),
             this.#separator(),
 
             // Paragraph formatting
-            format,
-            lists,
-            this.quoteButton,
-            alignment,
+            this.#toolbarItem('paragraph', format),
+            this.#toolbarItem('lists', lists),
+            this.#toolbarItem('quote', this.quoteButton),
+            this.#toolbarItem('alignment', alignment),
             this.#separator(),
 
             // Host application extensions
-            ...(customActions ? [customActions, this.#separator()] : []),
+            ...(customActions
+                ? [
+                    this.#toolbarItem('customActions', customActions),
+                    this.#separator()
+                ]
+                : []),
 
             // Output / preview
-            this.#actionButton(
-                this.t.actions.exportJson,
-                () => this.actions.exportJson?.(),
-                codeIcon('json')
+            this.#toolbarItem(
+                'exportJson',
+                this.#actionButton(
+                    this.t.actions.exportJson,
+                    () => this.actions.exportJson?.(),
+                    codeIcon('json')
+                )
             ),
-            this.#actionButton(
-                this.t.actions.exportHtml,
-                () => this.actions.exportHtml?.(),
-                codeIcon('html')
+            this.#toolbarItem(
+                'exportHtml',
+                this.#actionButton(
+                    this.t.actions.exportHtml,
+                    () => this.actions.exportHtml?.(),
+                    codeIcon('html')
+                )
             ),
-            this.#actionButton(
-                this.t.actions.preview,
-                () => this.actions.preview?.(),
-                previewIcon()
+            this.#toolbarItem(
+                'preview',
+                this.#actionButton(
+                    this.t.actions.preview,
+                    () => this.actions.preview?.(),
+                    previewIcon()
+                )
+            ),
+            this.#toolbarItem(
+                'fullscreen',
+                this.#actionButton(
+                    this.t.actions.fullscreen,
+                    () => this.actions.fullscreen?.(),
+                    fullscreenIcon()
+                )
             ),
 
-            // Version / identity
+            // Version / identity — intentionally never disableable
             versionBadge
         );
+
+        this.#cleanupToolbarSeparators();
     }
 
 
@@ -1640,6 +2062,18 @@ export default class TextToolbar {
                 hasTag('s', 'strike', 'del')
                 || hasComputedStyle(style =>
                     style.textDecorationLine.includes('line-through')
+                ),
+
+            superscript:
+                hasTag('sup')
+                || hasComputedStyle(style =>
+                    style.verticalAlign === 'super'
+                ),
+
+            subscript:
+                hasTag('sub')
+                || hasComputedStyle(style =>
+                    style.verticalAlign === 'sub'
                 )
         };
 

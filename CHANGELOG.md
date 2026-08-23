@@ -2,6 +2,291 @@
 
 All notable changes to Vanilla HTML Designer will be documented in this file.
 
+## [0.6.64] - 2026-08-23
+
+### Fixed
+
+- Fixed the drag-handle tooltip showing `undefined` by ensuring the block and zone drag labels are present in translations.
+
+### Changed
+
+- Removed the legacy Up/Down movement buttons from content blocks.
+- Removed the legacy Up/Down movement buttons from complete zones.
+- Block controls are now reduced to `⋮⋮` (drag) and `×` (remove).
+- Zone controls are now reduced to `⋮⋮` (drag) and `×` (remove), plus the first-zone Add Zone control where applicable.
+- Drag-and-drop is now the primary movement mechanism, simplifying the editor UI.
+
+## [0.6.63] - 2026-08-23
+
+### Changed
+
+- Increased drag auto-scroll speed for both content blocks and complete zones.
+- Minimum edge-scroll speed increased from 5px to 8px per animation frame.
+- Maximum edge-scroll speed increased from 28px to 44px per animation frame.
+- Progressive acceleration near the viewport edge is preserved.
+
+## [0.6.62] - 2026-08-23
+
+### Added
+
+- Added vertical drag-and-drop for complete zones.
+- Each zone now has a dedicated `⋮⋮` drag handle alongside its existing Up, Down and Remove controls.
+- Zones can be moved before or after any other zone.
+- Added a zone-level insertion indicator and lightweight drag preview.
+- Added automatic scrolling near the top/bottom viewport edges while moving zones.
+- Zone drag uses Pointer Events and supports mouse, pen and touch.
+- Completed zone moves are recorded in Undo/Redo.
+- Column structure, widths and all contained blocks move together unchanged.
+
+## [0.6.61] - 2026-08-23
+
+### Fixed
+
+- The editor-only light grey column background is no longer stored as content data by default.
+- New columns now use an empty/transparent `backgroundColor` in the project JSON.
+- Exported public HTML omits `background-color` when no column background was explicitly selected.
+- The editor still displays `#fafbfc` as a visual editing aid through its editor styling.
+- Legacy JSON values using the former automatic `#fafbfc` default are migrated to transparent when loaded.
+
+## [0.6.60] - 2026-08-23
+
+### Changed
+
+- Removed the grey background surrounding the editor canvas.
+- Removed the 16px canvas padding so content zones now start directly at the editor edge.
+- Removed the canvas border radius associated with the former grey surround.
+
+## [0.6.59] - 2026-08-23
+
+### Fixed
+
+- Fixed block drops when moving downward inside the same column.
+- The target index was previously decremented a second time even though the dragged source block had already been excluded from the drop-position calculation.
+- Downward and upward moves now use the same destination-index coordinate system.
+
+## [0.6.58] - 2026-08-23
+
+### Fixed
+
+- Fixed downward block drag auto-scroll across very tall content.
+- The drop target and insertion marker are now recalculated on every auto-scroll animation frame, even when the pointer itself remains stationary.
+- Stored the last pointer coordinates during dragging so the destination can follow the scrolling document.
+
+### Changed
+
+- Increased drag auto-scroll speed slightly: maximum speed is now 28px per animation frame instead of 22px.
+- Minimum edge-scroll speed increased from 4px to 5px per frame.
+
+## [0.6.57] - 2026-08-23
+
+### Added
+
+- Added automatic scrolling while dragging blocks near the top or bottom edge of the viewport.
+- Auto-scroll starts inside a 90px edge zone.
+- Scroll speed increases progressively as the pointer approaches the edge.
+- Auto-scroll stops immediately when the pointer leaves the edge zone or when dragging ends.
+- Fullscreen mode scrolls the editor canvas; normal mode scrolls the document.
+
+## [0.6.56] - 2026-08-23
+
+### Fixed
+
+- Reworked block drag-and-drop after the initial 0.6.55 implementation could freeze during pointer movement.
+- Pointer tracking now uses temporary document-level listeners instead of pointer capture on the drag handle.
+- Removed full DOM cloning of the dragged block; the drag preview is now a lightweight label.
+- Removed the global `body *` cursor override used during dragging.
+- Added a 4px movement threshold before a drag actually starts.
+- Drop-target detection now iterates direct column children instead of relying on `:scope` selectors.
+
+## [0.6.55] - 2026-08-23
+
+### Added
+
+- Added drag-and-drop reordering for content blocks.
+- Each block now has a dedicated `⋮⋮` drag handle.
+- Blocks can be moved vertically within a column, between columns, and between zones.
+- Added a compact insertion indicator showing the exact drop position.
+- Added a translucent drag preview and source-block feedback.
+- Implemented with Pointer Events for mouse, pen and touch support.
+- Drag operations are recorded in the existing Undo/Redo history.
+- Existing Up/Down controls remain available as a precise non-drag alternative.
+
+## [0.6.54] - 2026-08-23
+
+### Added
+
+- Image blocks can now be resized directly in the canvas with left and right drag handles.
+- Visual resizing preserves the image aspect ratio and updates the existing Width property.
+- Resize handles appear only on hover, focus, selection or while dragging.
+- Touch/pointer events are supported, with larger handles on coarse pointer devices.
+- Image width is constrained between 5% and 100%.
+
+### Changed
+
+- French label `Couleur de fond du texte` renamed to `Couleur de fond`.
+
+## [0.6.53] - 2026-08-23
+
+### Changed
+
+- Grouped less-frequently used character formatting commands into one compact dropdown.
+- The main toolbar now keeps Bold, Italic and Underline directly visible.
+- Strike, Superscript, Subscript, Text color and Text background color are available from the new `Mise en forme complémentaire` dropdown.
+- Existing `disabledToolbarButtons` keys (`strike`, `superscript`, `subscript`, `textColor`, `backgroundColor`) continue to hide individual commands inside the dropdown.
+- The dropdown hides itself automatically if all five commands are disabled.
+
+## [0.6.52] - 2026-08-23
+
+### Fixed
+
+- Paragraph and heading indentation no longer relies on the browser `indent` command, preventing unintended `<blockquote>` creation and citation styling.
+- Paragraph and heading indentation now uses `margin-left` in 2rem steps.
+- List indentation keeps the browser structural indentation behavior so nested lists remain semantic.
+
+### Changed
+
+- The right-side identity button tooltip and ARIA label now read `À propos de Vanilla HTML Designer` without the version number.
+- The version number remains displayed inside the About dialog.
+
+## [0.6.51] - 2026-08-23
+
+### Added
+
+- Added compact Superscript (`x²`) and Subscript (`x₂`) toolbar controls.
+- Added Decrease indent and Increase indent commands inside the Alignment dropdown.
+- Superscript and Subscript active states are reflected in the toolbar.
+- Added `superscript`, `subscript`, `indent` and `outdent` configuration keys for `disabledToolbarButtons`.
+
+## [0.6.50] - 2026-08-23
+
+### Added
+
+- Added Find / Replace toolbar command after Clear formatting.
+- Searches Heading, Text and Code blocks across the whole document.
+- Added Previous / Next navigation, current replacement and Replace all.
+- Added optional case-sensitive search.
+- Enter navigates to next result; Shift+Enter navigates to previous result.
+- Search results scroll into view and are selected in the editor.
+- Added `searchReplace` to `disabledToolbarButtons`.
+
+## [0.6.49] - 2026-08-23
+
+### Changed
+
+- Toolbar visual experiment: icon buttons are now borderless.
+- Reduced toolbar button dimensions and spacing.
+- Added a light grey toolbar background.
+- Hover and active states now use subtle grey/blue backgrounds instead of borders.
+- Select and color controls were compacted to match the new toolbar density.
+
+## [0.6.48] - 2026-08-23
+
+### Added
+
+- Added static `HtmlDesigner.renderJson(json)` API.
+- Accepts either a VHD JSON string or an already parsed project object.
+- Returns the same final HTML generated by the editor serializer without creating a visible editor.
+- Invalid JSON or invalid project data produces an explicit error.
+- Useful for autosave previews, version comparison and restoration interfaces.
+
+## [0.6.47] - 2026-08-23
+
+### Added
+
+- Added public `editor.setStatus(message, type)` API.
+- Status messages are displayed discreetly in the Properties panel under document statistics.
+- Supported status types: `info`, `success`, `error`.
+- Empty messages hide the status area.
+- Status remains visible when selecting rows, columns or blocks.
+
+## [0.6.46] - 2026-08-23
+
+### Added
+
+- Added a dedicated Fullscreen toolbar button immediately after Preview.
+- Fullscreen mode expands Vanilla HTML Designer to the entire viewport.
+- Pressing `Escape` exits fullscreen mode.
+- The page body is prevented from scrolling while fullscreen is active.
+- The button automatically changes its tooltip to “Exit fullscreen” while active.
+- `fullscreen` is available as a `disabledToolbarButtons` key.
+
+## [0.6.45] - 2026-08-23
+
+### Changed
+
+- Harmonized the editor around a properties-driven interface.
+- Image URL, gallery selection and alternative text moved from the canvas to the Properties panel.
+- Button text and URL moved from the canvas to the Properties panel.
+- Image and Button blocks now display only their visual result in the canvas.
+- Spacer height is now configured only from the Properties panel.
+- Divider continues to use the Properties panel for all configuration.
+- Existing JSON and exported HTML structures remain unchanged.
+
+### Improved
+
+- The central editing canvas is now much closer to the final published rendering.
+- Empty Image blocks use a discreet visual placeholder until an image is selected.
+
+## [0.6.44] - 2026-08-22
+
+### Added
+
+- Added `disabledSections` initialization option.
+- Individual section/layout presets can now be hidden from the Add section `+` menu.
+- Supported keys: `one`, `twoEqual`, `twoWideLeft`, `twoWideRight`, `three`, `four`, `five`, `six`.
+- The Add section `+` control is hidden automatically if every layout is disabled.
+- Existing loaded sections are preserved.
+- Disabled section presets are also rejected by `addRow()`.
+
+## [0.6.43] - 2026-08-22
+
+### Added
+
+- Added `disabledContentBlocks` initialization option for the `+ Add content` menu.
+- Individual content block types can now be hidden using stable keys.
+- Supported keys: `heading`, `text`, `image`, `button`, `divider`, `spacer`, `code`.
+- The Add content `+` control is hidden automatically if every block type is disabled.
+- Existing loaded blocks are never removed by this option.
+- Disabled block types are also rejected by the internal `addBlock()` method.
+
+## [0.6.42] - 2026-08-22
+
+### Added
+
+- Added `disabledToolbarButtons` initialization option.
+- Every toolbar control can be hidden individually using a stable language-independent key.
+- The About / Vanilla HTML Designer identity button is intentionally always displayed.
+- Toolbar separators are automatically cleaned up when controls are hidden.
+- Documented all supported toolbar keys.
+
+## [0.6.41] - 2026-08-22
+
+### Added
+
+- Added permanent document statistics at the top of the Properties panel.
+- Displays total word count and character count.
+- Counts Heading, Text and Code block contents across the entire document.
+- HTML markup inside Heading and Text blocks is excluded from the counts.
+- Statistics update live while editing Text, Heading and Code blocks.
+- Statistics remain visible regardless of the currently selected row, column or block.
+
+## [0.6.40] - 2026-08-22
+
+### Improved
+
+- Image Gallery dialog now uses a near-fullscreen layout equivalent to `max-width:95vw; height:95vh; margin:2.5vh auto`.
+- Gallery width is fixed to 95% of the viewport.
+- Gallery height is fixed to 95% of the viewport.
+- The embedded gallery iframe expands to fill the available dialog space.
+
+## [0.6.39] - 2026-08-22
+
+### Improved
+
+- Image Gallery modal enlarged to an XL layout comparable to Bootstrap `modal-xl`.
+- Maximum gallery width is now 1140 px.
+- The dialog remains responsive on smaller screens with a 1 rem margin on each side.
+
 ## [0.6.38] - 2026-08-22
 
 ### Added

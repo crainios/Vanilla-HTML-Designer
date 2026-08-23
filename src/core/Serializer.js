@@ -159,13 +159,17 @@ export default class Serializer {
 
             const columns = row.columns.map(column => {
                 const columnProperties = column.properties ?? {};
-                const columnBackground = columnProperties.backgroundColor || '#fafbfc';
+                const columnBackground = String(
+                    columnProperties.backgroundColor || ''
+                ).trim();
                 const columnPadding = Math.max(0, Number(columnProperties.padding ?? 10));
                 const blocks = column.blocks.map(serializeBlock).join('\n');
 
                 const columnStyle = [
                     `--vhd-span:${column.width}`,
-                    `background-color:${escapeAttribute(columnBackground)}`,
+                    ...(columnBackground
+                        ? [`background-color:${escapeAttribute(columnBackground)}`]
+                        : []),
                     `padding:${Number.isFinite(columnPadding) ? columnPadding : 10}px`
                 ].join(';');
 

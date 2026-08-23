@@ -48,7 +48,7 @@ export default class Grid {
                 id: createId('col'),
                 width,
                 properties: {
-                    backgroundColor: '#fafbfc',
+                    backgroundColor: '',
                     padding: 10
                 },
                 blocks: []

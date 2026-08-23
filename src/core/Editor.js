@@ -51,20 +51,54 @@ export default class Editor {
             ...options,
             defaultFontFamily: options.defaultFontFamily || 'system-ui'
         };
+        this.disabledContentBlocks = new Set(
+            Array.isArray(options.disabledContentBlocks)
+                ? options.disabledContentBlocks.map(value => String(value))
+                : []
+        );
+        this.disabledSections = new Set(
+            Array.isArray(options.disabledSections)
+                ? options.disabledSections.map(value => String(value))
+                : []
+        );
         this.root.style.setProperty('--vhd-default-font-family', this.options.defaultFontFamily);
         this.t = deepMerge(fallbackTranslations, this.options.translations ?? {});
-        this.project = HtmlImporter.fromHtml(this.options.html)
-            || this.#createDefaultProject();
+        this.project = this.#normalizeLegacyColumnBackgrounds(
+            HtmlImporter.fromHtml(this.options.html)
+                || this.#createDefaultProject()
+        );
         this.history = new History();
+        this.statusMessage = '';
+        this.statusType = 'info';
+        this.isFullscreen = false;
+        this.previousBodyOverflow = '';
+        this.blockDrag = null;
+        this.blockDragScrollFrame = null;
+        this.blockDragScrollDirection = 0;
+        this.blockDragScrollSpeed = 0;
+        this.rowDrag = null;
+        this.rowDragScrollFrame = null;
+        this.rowDragScrollDirection = 0;
+        this.rowDragScrollSpeed = 0;
+        this.fullscreenKeyHandler = event => {
+            if (event.key === 'Escape' && this.isFullscreen) {
+                event.preventDefault();
+                this.toggleFullscreen(false);
+            }
+        };
+
         this.textToolbar = new TextToolbar(this.t, {
             defaultFontFamily: this.options.defaultFontFamily,
             customButtons: this.options.customButtons ?? [],
+            disabledToolbarButtons: this.options.disabledToolbarButtons ?? [],
             publicApi: () => this.options.publicApi ?? null,
             undo: () => this.undo(),
             redo: () => this.redo(),
             exportJson: () => this.#showOutput(JSON.stringify(this.getData(), null, 2)),
             exportHtml: () => this.#showOutput(this.getHtml()),
             preview: () => this.#showPreview(),
+            fullscreen: () => this.toggleFullscreen(),
+            searchReplace: () => this.#showSearchReplaceDialog(),
             insertInlineImage: editable => this.#insertInlineImage(editable),
             insertVideo: editable => this.#insertVideo(editable),
             insertCode: editable => this.#showInsertCodeDialog(editable)
@@ -72,6 +106,59 @@ export default class Editor {
 
         this.#buildShell();
         this.render();
+    }
+
+    setStatus(message = '', type = 'info') {
+        const allowedTypes = new Set(['info', 'success', 'error']);
+
+        this.statusMessage = String(message ?? '');
+        this.statusType = allowedTypes.has(type) ? type : 'info';
+        this.#updateStatusMessage();
+
+        return {
+            message: this.statusMessage,
+            type: this.statusType
+        };
+    }
+
+    toggleFullscreen(force = null) {
+        const nextState = typeof force === 'boolean'
+            ? force
+            : !this.isFullscreen;
+
+        if (nextState === this.isFullscreen) {
+            return this.isFullscreen;
+        }
+
+        this.isFullscreen = nextState;
+        this.root.classList.toggle('vhd-fullscreen', this.isFullscreen);
+
+        if (this.isFullscreen) {
+            this.previousBodyOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            document.addEventListener('keydown', this.fullscreenKeyHandler, true);
+        } else {
+            document.body.style.overflow = this.previousBodyOverflow;
+            document.removeEventListener('keydown', this.fullscreenKeyHandler, true);
+        }
+
+        const button = this.root.querySelector('[data-vhd-toolbar-key="fullscreen"]');
+
+        if (button) {
+            button.classList.toggle('is-active', this.isFullscreen);
+            button.setAttribute('aria-pressed', this.isFullscreen ? 'true' : 'false');
+            button.title = this.isFullscreen
+                ? this.t.actions.exitFullscreen
+                : this.t.actions.fullscreen;
+            button.setAttribute(
+                'aria-label',
+                this.isFullscreen
+                    ? this.t.actions.exitFullscreen
+                    : this.t.actions.fullscreen
+            );
+        }
+
+        return this.isFullscreen;
     }
 
     insertAtCursor(content, options = {}) {
@@ -258,6 +345,493 @@ export default class Editor {
         requestAnimationFrame(() => this.codeTextarea.focus());
     }
 
+    #getSearchableElements() {
+        const items = [];
+
+        this.canvas.querySelectorAll('.vhd-block').forEach(wrapper => {
+            const rowIndex = Number(wrapper.dataset.rowIndex);
+            const columnIndex = Number(wrapper.dataset.columnIndex);
+            const blockIndex = Number(wrapper.dataset.blockIndex);
+            const block = this.project?.rows?.[rowIndex]?.columns?.[columnIndex]?.blocks?.[blockIndex];
+
+            if (!block) {
+                return;
+            }
+
+            if (block.type === 'heading' || block.type === 'text') {
+                const element = wrapper.querySelector('[contenteditable="true"]');
+
+                if (element) {
+                    items.push({
+                        block,
+                        wrapper,
+                        element,
+                        kind: 'html'
+                    });
+                }
+
+                return;
+            }
+
+            if (block.type === 'code') {
+                const element = wrapper.querySelector('.vhd-code-editor');
+
+                if (element) {
+                    items.push({
+                        block,
+                        wrapper,
+                        element,
+                        kind: 'code'
+                    });
+                }
+            }
+        });
+
+        return items;
+    }
+
+    #findTextMatches(query, caseSensitive = false) {
+        const needle = String(query ?? '');
+
+        if (!needle) {
+            return [];
+        }
+
+        const searchedNeedle = caseSensitive
+            ? needle
+            : needle.toLocaleLowerCase();
+
+        const matches = [];
+
+        for (const item of this.#getSearchableElements()) {
+            const text = item.kind === 'code'
+                ? item.element.value
+                : item.element.textContent || '';
+
+            const searchedText = caseSensitive
+                ? text
+                : text.toLocaleLowerCase();
+
+            let offset = 0;
+
+            while (offset <= searchedText.length - searchedNeedle.length) {
+                const index = searchedText.indexOf(searchedNeedle, offset);
+
+                if (index === -1) {
+                    break;
+                }
+
+                matches.push({
+                    ...item,
+                    start: index,
+                    end: index + needle.length
+                });
+
+                offset = index + Math.max(1, needle.length);
+            }
+        }
+
+        return matches;
+    }
+
+    #rangeFromTextOffsets(element, start, end) {
+        const walker = document.createTreeWalker(
+            element,
+            NodeFilter.SHOW_TEXT
+        );
+
+        let position = 0;
+        let startNode = null;
+        let startOffset = 0;
+        let endNode = null;
+        let endOffset = 0;
+        let node;
+
+        while ((node = walker.nextNode())) {
+            const nextPosition = position + node.nodeValue.length;
+
+            if (!startNode && start >= position && start <= nextPosition) {
+                startNode = node;
+                startOffset = Math.min(node.nodeValue.length, start - position);
+            }
+
+            if (end >= position && end <= nextPosition) {
+                endNode = node;
+                endOffset = Math.min(node.nodeValue.length, end - position);
+                break;
+            }
+
+            position = nextPosition;
+        }
+
+        if (!startNode || !endNode) {
+            return null;
+        }
+
+        const range = document.createRange();
+        range.setStart(startNode, startOffset);
+        range.setEnd(endNode, endOffset);
+
+        return range;
+    }
+
+    #selectSearchMatch(match) {
+        if (!match) {
+            return;
+        }
+
+        match.wrapper.scrollIntoView({
+            block: 'center',
+            behavior: 'smooth'
+        });
+
+        if (match.kind === 'code') {
+            match.element.focus();
+            match.element.setSelectionRange(match.start, match.end);
+            return;
+        }
+
+        const range = this.#rangeFromTextOffsets(
+            match.element,
+            match.start,
+            match.end
+        );
+
+        if (!range) {
+            return;
+        }
+
+        match.element.focus();
+
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        this.textToolbar.setActiveEditable(match.element);
+    }
+
+    #replaceSearchMatch(match, replacement) {
+        if (!match) {
+            return false;
+        }
+
+        if (match.kind === 'code') {
+            match.element.setRangeText(
+                replacement,
+                match.start,
+                match.end,
+                'end'
+            );
+
+            match.element.dispatchEvent(new Event('input', {
+                bubbles: true
+            }));
+
+            return true;
+        }
+
+        const range = this.#rangeFromTextOffsets(
+            match.element,
+            match.start,
+            match.end
+        );
+
+        if (!range) {
+            return false;
+        }
+
+        range.deleteContents();
+        range.insertNode(document.createTextNode(replacement));
+        match.element.normalize();
+
+        match.element.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: 'insertReplacementText',
+            data: replacement
+        }));
+
+        return true;
+    }
+
+    #showSearchReplaceDialog() {
+        if (!this.searchReplaceDialog) {
+            this.searchReplaceDialog = document.createElement('dialog');
+            this.searchReplaceDialog.className = 'vhd-search-dialog';
+
+            const header = document.createElement('div');
+            header.className = 'vhd-search-dialog-header';
+
+            const title = document.createElement('strong');
+            title.textContent = this.t.search.title;
+
+            const close = document.createElement('button');
+            close.type = 'button';
+            close.className = 'vhd-secondary-button';
+            close.textContent = '×';
+            close.title = this.t.search.close;
+            close.setAttribute('aria-label', this.t.search.close);
+            close.addEventListener('click', () => this.searchReplaceDialog.close());
+
+            header.append(title, close);
+
+            const searchField = document.createElement('label');
+            searchField.className = 'vhd-search-field';
+
+            const searchLabel = document.createElement('span');
+            searchLabel.textContent = this.t.search.find;
+
+            this.searchInput = document.createElement('input');
+            this.searchInput.type = 'text';
+            this.searchInput.autocomplete = 'off';
+
+            searchField.append(searchLabel, this.searchInput);
+
+            const replaceField = document.createElement('label');
+            replaceField.className = 'vhd-search-field';
+
+            const replaceLabel = document.createElement('span');
+            replaceLabel.textContent = this.t.search.replaceWith;
+
+            this.replaceInput = document.createElement('input');
+            this.replaceInput.type = 'text';
+            this.replaceInput.autocomplete = 'off';
+
+            replaceField.append(replaceLabel, this.replaceInput);
+
+            const options = document.createElement('div');
+            options.className = 'vhd-search-options';
+
+            const caseLabel = document.createElement('label');
+            caseLabel.className = 'vhd-search-checkbox';
+
+            this.searchCaseSensitive = document.createElement('input');
+            this.searchCaseSensitive.type = 'checkbox';
+
+            const caseText = document.createElement('span');
+            caseText.textContent = this.t.search.caseSensitive;
+
+            caseLabel.append(this.searchCaseSensitive, caseText);
+            options.append(caseLabel);
+
+            this.searchStatus = document.createElement('div');
+            this.searchStatus.className = 'vhd-search-status';
+            this.searchStatus.setAttribute('aria-live', 'polite');
+
+            const actions = document.createElement('div');
+            actions.className = 'vhd-search-actions';
+
+            const previous = document.createElement('button');
+            previous.type = 'button';
+            previous.className = 'vhd-secondary-button';
+            previous.textContent = this.t.search.previous;
+
+            const next = document.createElement('button');
+            next.type = 'button';
+            next.className = 'vhd-secondary-button';
+            next.textContent = this.t.search.next;
+
+            const replace = document.createElement('button');
+            replace.type = 'button';
+            replace.className = 'vhd-secondary-button';
+            replace.textContent = this.t.search.replace;
+
+            const replaceAll = document.createElement('button');
+            replaceAll.type = 'button';
+            replaceAll.className = 'vhd-action-button';
+            replaceAll.textContent = this.t.search.replaceAll;
+
+            actions.append(previous, next, replace, replaceAll);
+
+            const refresh = (select = true) => {
+                this.searchMatches = this.#findTextMatches(
+                    this.searchInput.value,
+                    this.searchCaseSensitive.checked
+                );
+
+                if (!this.searchMatches.length) {
+                    this.searchMatchIndex = -1;
+                    this.searchStatus.textContent = this.searchInput.value
+                        ? this.t.search.noResults
+                        : this.t.search.enterSearch;
+                    return;
+                }
+
+                if (
+                    !Number.isInteger(this.searchMatchIndex)
+                    || this.searchMatchIndex < 0
+                    || this.searchMatchIndex >= this.searchMatches.length
+                ) {
+                    this.searchMatchIndex = 0;
+                }
+
+                this.searchStatus.textContent = this.t.search.resultCount
+                    .replace('%current%', String(this.searchMatchIndex + 1))
+                    .replace('%total%', String(this.searchMatches.length));
+
+                if (select) {
+                    this.#selectSearchMatch(
+                        this.searchMatches[this.searchMatchIndex]
+                    );
+                }
+            };
+
+            const move = direction => {
+                refresh(false);
+
+                if (!this.searchMatches.length) {
+                    return;
+                }
+
+                this.searchMatchIndex =
+                    (
+                        this.searchMatchIndex
+                        + direction
+                        + this.searchMatches.length
+                    )
+                    % this.searchMatches.length;
+
+                this.searchStatus.textContent = this.t.search.resultCount
+                    .replace('%current%', String(this.searchMatchIndex + 1))
+                    .replace('%total%', String(this.searchMatches.length));
+
+                this.#selectSearchMatch(
+                    this.searchMatches[this.searchMatchIndex]
+                );
+            };
+
+            previous.addEventListener('click', () => move(-1));
+            next.addEventListener('click', () => move(1));
+
+            replace.addEventListener('click', () => {
+                refresh(false);
+
+                const match = this.searchMatches[this.searchMatchIndex];
+
+                if (!match) {
+                    return;
+                }
+
+                this.#remember();
+
+                if (this.#replaceSearchMatch(match, this.replaceInput.value)) {
+                    refresh(false);
+
+                    if (this.searchMatches.length) {
+                        this.searchMatchIndex = Math.min(
+                            this.searchMatchIndex,
+                            this.searchMatches.length - 1
+                        );
+
+                        this.searchStatus.textContent = this.t.search.resultCount
+                            .replace('%current%', String(this.searchMatchIndex + 1))
+                            .replace('%total%', String(this.searchMatches.length));
+
+                        this.#selectSearchMatch(
+                            this.searchMatches[this.searchMatchIndex]
+                        );
+                    } else {
+                        this.searchStatus.textContent = this.t.search.noResults;
+                    }
+                }
+            });
+
+            replaceAll.addEventListener('click', () => {
+                refresh(false);
+
+                if (!this.searchMatches.length) {
+                    return;
+                }
+
+                this.#remember();
+
+                const matches = [...this.searchMatches].reverse();
+                let replaced = 0;
+
+                for (const match of matches) {
+                    if (this.#replaceSearchMatch(match, this.replaceInput.value)) {
+                        replaced += 1;
+                    }
+                }
+
+                this.searchMatchIndex = -1;
+                this.searchMatches = [];
+
+                this.searchStatus.textContent = this.t.search.replacedCount
+                    .replace('%count%', String(replaced));
+
+                this.#updateDocumentStatistics();
+            });
+
+            this.searchInput.addEventListener('input', () => {
+                this.searchMatchIndex = 0;
+                refresh();
+            });
+
+            this.searchCaseSensitive.addEventListener('change', () => {
+                this.searchMatchIndex = 0;
+                refresh();
+            });
+
+            this.searchInput.addEventListener('keydown', event => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    move(event.shiftKey ? -1 : 1);
+                }
+            });
+
+            this.searchReplaceDialog.append(
+                header,
+                searchField,
+                replaceField,
+                options,
+                this.searchStatus,
+                actions
+            );
+
+            this.searchReplaceDialog.addEventListener('click', event => {
+                if (event.target !== this.searchReplaceDialog) {
+                    return;
+                }
+
+                const rect = this.searchReplaceDialog.getBoundingClientRect();
+                const outside =
+                    event.clientX < rect.left
+                    || event.clientX > rect.right
+                    || event.clientY < rect.top
+                    || event.clientY > rect.bottom;
+
+                if (outside) {
+                    this.searchReplaceDialog.close();
+                }
+            });
+
+            document.body.append(this.searchReplaceDialog);
+        }
+
+        this.searchMatchIndex = 0;
+        this.searchMatches = this.#findTextMatches(
+            this.searchInput.value,
+            this.searchCaseSensitive.checked
+        );
+
+        if (this.searchMatches.length) {
+            this.searchStatus.textContent = this.t.search.resultCount
+                .replace('%current%', '1')
+                .replace('%total%', String(this.searchMatches.length));
+        } else {
+            this.searchStatus.textContent = this.searchInput.value
+                ? this.t.search.noResults
+                : this.t.search.enterSearch;
+        }
+
+        this.searchReplaceDialog.showModal();
+
+        requestAnimationFrame(() => {
+            this.searchInput.focus();
+            this.searchInput.select();
+        });
+    }
+
     #showOutput(content) {
         if (!this.outputDialog) {
             this.outputDialog = document.createElement('dialog');
@@ -381,13 +955,140 @@ export default class Editor {
 
         this.propertiesPanel = document.createElement('aside');
         this.propertiesPanel.className = 'vhd-properties';
-        this.propertiesPanel.innerHTML = `<h3>${this.t.properties.title}</h3><p class="vhd-properties-empty">${this.t.properties.none}</p>`;
 
         this.workspace = document.createElement('div');
         this.workspace.className = 'vhd-workspace';
         this.workspace.append(this.canvas, this.propertiesPanel);
 
         this.root.replaceChildren(this.textToolbar.element, this.workspace);
+        this.#resetPropertiesPanel();
+    }
+
+    #textFromHtml(html = '') {
+        const template = document.createElement('template');
+        template.innerHTML = String(html ?? '');
+        return template.content.textContent || '';
+    }
+
+    #getDocumentStatistics() {
+        let words = 0;
+        let characters = 0;
+
+        const countText = value => {
+            const text = String(value ?? '');
+            characters += text.length;
+
+            const matches = text.match(/[\p{L}\p{N}_]+(?:['’.-][\p{L}\p{N}_]+)*/gu);
+            words += matches?.length ?? 0;
+        };
+
+        for (const row of this.project?.rows ?? []) {
+            for (const column of row.columns ?? []) {
+                for (const block of column.blocks ?? []) {
+                    if (block.type === 'heading' || block.type === 'text') {
+                        countText(this.#textFromHtml(block.content));
+                    } else if (block.type === 'code') {
+                        countText(block.code);
+                    }
+                }
+            }
+        }
+
+        return { words, characters };
+    }
+
+    #createStatusMessage() {
+        const status = document.createElement('div');
+        status.className = `vhd-status vhd-status-${this.statusType || 'info'}`;
+        status.dataset.vhdStatus = 'true';
+
+        if (!this.statusMessage) {
+            status.hidden = true;
+            return status;
+        }
+
+        status.textContent = this.statusMessage;
+        return status;
+    }
+
+    #updateStatusMessage() {
+        const current = this.propertiesPanel?.querySelector('[data-vhd-status="true"]');
+
+        if (!current) {
+            return;
+        }
+
+        current.className = `vhd-status vhd-status-${this.statusType || 'info'}`;
+        current.textContent = this.statusMessage || '';
+        current.hidden = !this.statusMessage;
+    }
+
+    #createDocumentStatistics() {
+        const stats = document.createElement('section');
+        stats.className = 'vhd-document-stats';
+
+        const title = document.createElement('div');
+        title.className = 'vhd-document-stats-title';
+        title.textContent = this.t.properties.documentStatistics;
+
+        const words = document.createElement('div');
+        words.className = 'vhd-document-stat';
+
+        const wordsLabel = document.createElement('span');
+        wordsLabel.textContent = this.t.properties.wordCount;
+
+        const wordsValue = document.createElement('strong');
+        wordsValue.dataset.vhdStat = 'words';
+
+        words.append(wordsLabel, wordsValue);
+
+        const characters = document.createElement('div');
+        characters.className = 'vhd-document-stat';
+
+        const charactersLabel = document.createElement('span');
+        charactersLabel.textContent = this.t.properties.characterCount;
+
+        const charactersValue = document.createElement('strong');
+        charactersValue.dataset.vhdStat = 'characters';
+
+        characters.append(charactersLabel, charactersValue);
+        stats.append(title, words, characters);
+
+        return stats;
+    }
+
+    #updateDocumentStatistics() {
+        const stats = this.#getDocumentStatistics();
+
+        const words = this.propertiesPanel?.querySelector('[data-vhd-stat="words"]');
+        const characters = this.propertiesPanel?.querySelector('[data-vhd-stat="characters"]');
+
+        if (words) {
+            words.textContent = stats.words.toLocaleString();
+        }
+
+        if (characters) {
+            characters.textContent = stats.characters.toLocaleString();
+        }
+    }
+
+    #resetPropertiesPanel() {
+        const title = document.createElement('h3');
+        title.textContent = this.t.properties.title;
+
+        const empty = document.createElement('p');
+        empty.className = 'vhd-properties-empty';
+        empty.textContent = this.t.properties.none;
+
+        this.propertiesPanel.replaceChildren(
+            this.#createDocumentStatistics(),
+            this.#createStatusMessage(),
+            title,
+            empty
+        );
+
+        this.#updateDocumentStatistics();
+        this.#updateStatusMessage();
     }
 
     #actionButton(label, callback) {
@@ -435,12 +1136,31 @@ export default class Editor {
         return field;
     }
 
+    #propertyAction(label, onClick) {
+        const field = document.createElement('div');
+        field.className = 'vhd-property-action';
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'vhd-secondary-button';
+        button.textContent = label;
+        button.addEventListener('click', onClick);
+
+        field.append(button);
+        return field;
+    }
+
     #selectProperties(kind, target, element) {
         this.root.querySelectorAll('.vhd-selected').forEach(item => item.classList.remove('vhd-selected'));
         element?.classList.add('vhd-selected');
 
         const panel = this.propertiesPanel;
-        panel.replaceChildren();
+        panel.replaceChildren(
+            this.#createDocumentStatistics(),
+            this.#createStatusMessage()
+        );
+        this.#updateDocumentStatistics();
+        this.#updateStatusMessage();
 
         const title = document.createElement('h3');
         if (kind === 'row') {
@@ -489,47 +1209,138 @@ export default class Editor {
         }
 
         if (target.type === 'image') {
-            panel.append(
-                this.#propertyField(this.t.properties.width, 'number', target.properties.width ?? 100, value => {
-                    target.properties.width = Math.min(100, Math.max(1, Number(value))); const img=element.querySelector('img'); if(img) img.style.width=`${target.properties.width}%`;
-                }),
+            const updateImagePreview = () => {
+                const preview = element.querySelector('.vhd-image-editor');
+
+                if (!preview) {
+                    return;
+                }
+
+                this.#renderResizableImage(preview, target, element);
+            };
+
+            const sourceField = this.#propertyField(
+                this.t.editor.imageUrl,
+                'text',
+                target.src || '',
+                value => {
+                    target.src = value.trim();
+                    updateImagePreview();
+                }
+            );
+
+            const sourceInput = sourceField.querySelector('input');
+            sourceInput.inputMode = 'url';
+            sourceInput.autocomplete = 'url';
+
+            const fields = [
+                sourceField
+            ];
+
+            if (this.options.imageGalleryUrl || typeof this.options.onImageSelect === 'function') {
+                fields.push(
+                    this.#propertyAction(this.t.editor.chooseImage, async () => {
+                        if (this.options.imageGalleryUrl) {
+                            await this.#openImageGallery({
+                                type: 'block',
+                                block: target
+                            });
+                            return;
+                        }
+
+                        const selected = await this.options.onImageSelect();
+
+                        if (!selected?.src) {
+                            return;
+                        }
+
+                        target.src = String(selected.src);
+                        target.alt = String(selected.alt ?? target.alt ?? '');
+                        updateImagePreview();
+
+                        sourceInput.value = target.src;
+
+                        const altInput = panel.querySelector('[data-vhd-property="image-alt"]');
+                        if (altInput) {
+                            altInput.value = target.alt;
+                        }
+                    })
+                );
+            }
+
+            const altField = this.#propertyField(
+                this.t.editor.imageAlt,
+                'text',
+                target.alt || '',
+                value => {
+                    target.alt = value;
+                    const img = element.querySelector('.vhd-image-editor img');
+                    if (img) img.alt = value;
+                }
+            );
+            altField.querySelector('input').dataset.vhdProperty = 'image-alt';
+            fields.push(altField);
+
+            fields.push(
+                (() => {
+                    const field = this.#propertyField(
+                        this.t.properties.width,
+                        'number',
+                        target.properties.width ?? 100,
+                        value => {
+                            target.properties.width = Math.min(100, Math.max(5, Number(value)));
+                            const frame = element.querySelector('.vhd-image-resize-frame');
+
+                            if (frame) {
+                                frame.style.width = `${target.properties.width}%`;
+                            }
+                        },
+                        { min: 5, max: 100, step: 1 }
+                    );
+
+                    field.querySelector('input').dataset.vhdProperty = 'image-width';
+                    return field;
+                })(),
                 this.#propertyField(this.t.properties.align, 'select', target.properties.align || 'center', value => {
                     target.properties.align = value;
-
-                    const img = element.querySelector('.vhd-image-editor img');
-
-                    if (img) {
-                        if (value === 'left') {
-                            img.style.marginLeft = '0';
-                            img.style.marginRight = 'auto';
-                        } else if (value === 'right') {
-                            img.style.marginLeft = 'auto';
-                            img.style.marginRight = '0';
-                        } else {
-                            img.style.marginLeft = 'auto';
-                            img.style.marginRight = 'auto';
-                        }
-                    }
+                    updateImagePreview();
                 }, [['left',this.t.properties.left],['center',this.t.properties.center],['right',this.t.properties.right]]),
                 this.#propertyField(this.t.properties.borderRadius, 'number', target.properties.borderRadius ?? 4, value => {
-                    target.properties.borderRadius=Number(value); const img=element.querySelector('img'); if(img) img.style.borderRadius=`${value}px`;
+                    target.properties.borderRadius = Number(value);
+                    const img = element.querySelector('img');
+                    if (img) img.style.borderRadius = `${value}px`;
                 })
             );
+
+            panel.append(...fields);
         } else if (target.type === 'button') {
+            const link = element.querySelector('a');
+
             panel.append(
-                this.#propertyField(this.t.properties.buttonBackground,'color',target.properties.backgroundColor||'#2563eb',value=>{target.properties.backgroundColor=value; element.querySelector('a').style.backgroundColor=value;}),
-                this.#propertyField(this.t.properties.buttonColor,'color',target.properties.color||'#ffffff',value=>{target.properties.color=value; element.querySelector('a').style.color=value;}),
-                this.#propertyField(this.t.properties.borderRadius,'number',target.properties.borderRadius??5,value=>{target.properties.borderRadius=Number(value); element.querySelector('a').style.borderRadius=`${value}px`;}),
-                this.#propertyField(this.t.properties.paddingHorizontal,'number',target.properties.paddingHorizontal??16,value=>{target.properties.paddingHorizontal=Number(value); element.querySelector('a').style.paddingLeft=`${value}px`; element.querySelector('a').style.paddingRight=`${value}px`;}),
-                this.#propertyField(this.t.properties.paddingVertical,'number',target.properties.paddingVertical??10,value=>{target.properties.paddingVertical=Number(value); element.querySelector('a').style.paddingTop=`${value}px`; element.querySelector('a').style.paddingBottom=`${value}px`;}),
+                this.#propertyField(
+                    this.t.editor.buttonText,
+                    'text',
+                    target.text || '',
+                    value => {
+                        target.text = value;
+                        if (link) link.textContent = value || 'Button';
+                    }
+                ),
+                this.#propertyField(
+                    this.t.editor.buttonUrl,
+                    'text',
+                    target.url || '',
+                    value => {
+                        target.url = value.trim();
+                        if (link) link.href = target.url || '#';
+                    }
+                ),
                 this.#propertyField(
                     this.t.properties.linkTarget,
                     'select',
                     target.properties.target === '_blank' ? '_blank' : '_self',
                     value => {
                         target.properties.target = value === '_blank' ? '_blank' : '_self';
-
-                        const link = element.querySelector('a');
 
                         if (link) {
                             link.target = target.properties.target;
@@ -546,7 +1357,47 @@ export default class Editor {
                         ['_blank', this.t.properties.linkNewWindow]
                     ]
                 ),
-                this.#propertyField(this.t.properties.align,'select',target.properties.align||'left',value=>{target.properties.align=value;element.querySelector('.vhd-button-editor').style.textAlign=value;},[['left',this.t.properties.left],['center',this.t.properties.center],['right',this.t.properties.right]])
+                this.#propertyField(this.t.properties.buttonBackground,'color',target.properties.backgroundColor||'#2563eb',value=>{
+                    target.properties.backgroundColor=value;
+                    if (link) link.style.backgroundColor=value;
+                }),
+                this.#propertyField(this.t.properties.buttonColor,'color',target.properties.color||'#ffffff',value=>{
+                    target.properties.color=value;
+                    if (link) link.style.color=value;
+                }),
+                this.#propertyField(this.t.properties.borderRadius,'number',target.properties.borderRadius??5,value=>{
+                    target.properties.borderRadius=Number(value);
+                    if (link) link.style.borderRadius=`${value}px`;
+                }),
+                this.#propertyField(this.t.properties.paddingHorizontal,'number',target.properties.paddingHorizontal??16,value=>{
+                    target.properties.paddingHorizontal=Number(value);
+                    if (link) {
+                        link.style.paddingLeft=`${value}px`;
+                        link.style.paddingRight=`${value}px`;
+                    }
+                }),
+                this.#propertyField(this.t.properties.paddingVertical,'number',target.properties.paddingVertical??10,value=>{
+                    target.properties.paddingVertical=Number(value);
+                    if (link) {
+                        link.style.paddingTop=`${value}px`;
+                        link.style.paddingBottom=`${value}px`;
+                    }
+                }),
+                this.#propertyField(
+                    this.t.properties.align,
+                    'select',
+                    target.properties.align || 'left',
+                    value => {
+                        target.properties.align = value;
+                        const editorPreview = element.querySelector('.vhd-button-editor');
+                        if (editorPreview) editorPreview.style.textAlign = value;
+                    },
+                    [
+                        ['left', this.t.properties.left],
+                        ['center', this.t.properties.center],
+                        ['right', this.t.properties.right]
+                    ]
+                )
             );
         } else if (target.type === 'divider') {
             target.properties ??= {
@@ -561,7 +1412,22 @@ export default class Editor {
                 this.#propertyField(this.t.properties.dividerStyle,'select',target.properties.style||'solid',value=>{target.properties.style=value;element.querySelector('hr').style.borderTopStyle=value;},[['solid','Solid'],['dashed','Dashed'],['dotted','Dotted']])
             );
         } else if (target.type === 'spacer') {
-            panel.append(this.#propertyField(this.t.properties.height,'number',target.height??32,value=>{target.height=Number(value); const preview=element.querySelector('.vhd-spacer-preview'); if(preview) preview.style.height=`${value}px`; const label=element.querySelector('.vhd-spacer-value'); if(label) label.textContent=`${value}px`; const range=element.querySelector('.vhd-spacer-range'); if(range) range.value=value;}));
+            panel.append(
+                this.#propertyField(
+                    this.t.properties.height,
+                    'number',
+                    target.height ?? 32,
+                    value => {
+                        target.height = Math.max(0, Number(value));
+                        const preview = element.querySelector('.vhd-spacer-preview');
+                        if (preview) {
+                            preview.style.height = `${target.height}px`;
+                            preview.title = `${target.height}px`;
+                        }
+                    },
+                    { min: 0, max: 500, step: 1 }
+                )
+            );
         } else if (target.type === 'text' || target.type === 'heading') {
             panel.append(
                 this.#propertyField(this.t.properties.textColor,'color',target.properties.color||'#1f2937',value=>{target.properties.color=value; const editable=element.querySelector('[contenteditable]'); if(editable) editable.style.color=value;}),
@@ -605,17 +1471,30 @@ export default class Editor {
     }
 
     addRow(preset) {
+        if (this.disabledSections.has(preset)) {
+            return false;
+        }
+
         this.#remember();
         this.project.rows.push(
             this.#populateRowWithDefaultText(Grid.createPreset(preset))
         );
         this.render();
+        return true;
     }
 
     addBlock(rowIndex, columnIndex, type) {
+        if (
+            this.disabledContentBlocks.has(type)
+            || !BlockFactory.types.includes(type)
+        ) {
+            return false;
+        }
+
         this.#remember();
         this.project.rows[rowIndex].columns[columnIndex].blocks.push(BlockFactory.create(type));
         this.render();
+        return true;
     }
 
     removeRow(rowIndex) {
@@ -639,6 +1518,279 @@ export default class Editor {
         this.render();
     }
 
+    #startRowDrag(event, rowIndex) {
+        if (event.button !== 0 || this.rowDrag || this.blockDrag) {
+            return;
+        }
+
+        const sourceElement = event.currentTarget.closest('.vhd-row-editor');
+
+        if (!sourceElement) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const indicator = document.createElement('div');
+        indicator.className = 'vhd-row-drop-indicator';
+
+        const ghost = document.createElement('div');
+        ghost.className = 'vhd-row-drag-ghost';
+        ghost.textContent = this.t.editor.draggingRow;
+        ghost.style.left = `${event.clientX + 12}px`;
+        ghost.style.top = `${event.clientY + 12}px`;
+        document.body.append(ghost);
+
+        sourceElement.classList.add('vhd-row-drag-source');
+        document.body.classList.add('vhd-row-dragging');
+
+        const drag = {
+            rowIndex,
+            sourceElement,
+            indicator,
+            ghost,
+            targetIndex: null,
+            pointerId: event.pointerId,
+            moved: false,
+            startX: event.clientX,
+            startY: event.clientY,
+            clientX: event.clientX,
+            clientY: event.clientY
+        };
+
+        this.rowDrag = drag;
+
+        const onMove = moveEvent => {
+            if (!this.rowDrag || moveEvent.pointerId !== drag.pointerId) {
+                return;
+            }
+
+            const distance = Math.hypot(
+                moveEvent.clientX - drag.startX,
+                moveEvent.clientY - drag.startY
+            );
+
+            if (!drag.moved && distance < 4) {
+                return;
+            }
+
+            drag.moved = true;
+            this.#moveRowDrag(moveEvent);
+        };
+
+        const onEnd = endEvent => {
+            if (endEvent.pointerId !== drag.pointerId) {
+                return;
+            }
+
+            document.removeEventListener('pointermove', onMove, true);
+            document.removeEventListener('pointerup', onEnd, true);
+            document.removeEventListener('pointercancel', onEnd, true);
+
+            this.#finishRowDrag(endEvent);
+        };
+
+        document.addEventListener('pointermove', onMove, true);
+        document.addEventListener('pointerup', onEnd, true);
+        document.addEventListener('pointercancel', onEnd, true);
+    }
+
+    #moveRowDrag(event) {
+        const drag = this.rowDrag;
+
+        if (!drag) {
+            return;
+        }
+
+        event.preventDefault();
+
+        drag.clientX = event.clientX;
+        drag.clientY = event.clientY;
+
+        this.#updateRowDragAutoScroll(event.clientY);
+
+        drag.ghost.style.left = `${event.clientX + 12}px`;
+        drag.ghost.style.top = `${event.clientY + 12}px`;
+
+        this.#updateRowDragTarget(event.clientX, event.clientY);
+    }
+
+    #updateRowDragTarget(clientX, clientY) {
+        const drag = this.rowDrag;
+
+        if (!drag) {
+            return;
+        }
+
+        const content = this.canvas.querySelector(':scope > .vhd-content');
+
+        if (!content) {
+            return;
+        }
+
+        const rows = Array.from(
+            content.querySelectorAll(':scope > .vhd-row-editor')
+        ).filter(element => element !== drag.sourceElement);
+
+        let targetIndex = rows.length;
+        let beforeElement = null;
+
+        for (let index = 0; index < rows.length; index += 1) {
+            const rect = rows[index].getBoundingClientRect();
+
+            if (clientY < rect.top + rect.height / 2) {
+                targetIndex = index;
+                beforeElement = rows[index];
+                break;
+            }
+        }
+
+        /*
+         * Keep the marker inside the content area even when the pointer is over
+         * a row chooser or the whitespace between two zones.
+         */
+        if (beforeElement) {
+            content.insertBefore(drag.indicator, beforeElement);
+        } else {
+            content.append(drag.indicator);
+        }
+
+        drag.targetIndex = targetIndex;
+    }
+
+    #updateRowDragAutoScroll(clientY) {
+        const edge = 90;
+        const viewportHeight = window.innerHeight;
+
+        let direction = 0;
+        let speed = 0;
+
+        if (clientY < edge) {
+            direction = -1;
+            speed = Math.max(
+                8,
+                Math.round(((edge - clientY) / edge) * 44)
+            );
+        } else if (clientY > viewportHeight - edge) {
+            direction = 1;
+            speed = Math.max(
+                8,
+                Math.round(
+                    ((clientY - (viewportHeight - edge)) / edge) * 44
+                )
+            );
+        }
+
+        if (!direction) {
+            this.#stopRowDragAutoScroll();
+            return;
+        }
+
+        this.rowDragScrollDirection = direction;
+        this.rowDragScrollSpeed = Math.min(44, speed);
+
+        if (this.rowDragScrollFrame) {
+            return;
+        }
+
+        const tick = () => {
+            if (
+                !this.rowDrag
+                || !this.rowDragScrollDirection
+                || !this.rowDragScrollSpeed
+            ) {
+                this.rowDragScrollFrame = null;
+                return;
+            }
+
+            const scrollContainer = this.root.classList.contains('vhd-fullscreen')
+                ? this.canvas
+                : document.scrollingElement;
+
+            if (scrollContainer) {
+                scrollContainer.scrollTop +=
+                    this.rowDragScrollDirection * this.rowDragScrollSpeed;
+            }
+
+            if (
+                this.rowDrag
+                && Number.isFinite(this.rowDrag.clientX)
+                && Number.isFinite(this.rowDrag.clientY)
+            ) {
+                this.#updateRowDragTarget(
+                    this.rowDrag.clientX,
+                    this.rowDrag.clientY
+                );
+            }
+
+            this.rowDragScrollFrame = requestAnimationFrame(tick);
+        };
+
+        this.rowDragScrollFrame = requestAnimationFrame(tick);
+    }
+
+    #stopRowDragAutoScroll() {
+        this.rowDragScrollDirection = 0;
+        this.rowDragScrollSpeed = 0;
+
+        if (this.rowDragScrollFrame) {
+            cancelAnimationFrame(this.rowDragScrollFrame);
+            this.rowDragScrollFrame = null;
+        }
+    }
+
+    #finishRowDrag(event) {
+        const drag = this.rowDrag;
+
+        if (!drag) {
+            return;
+        }
+
+        this.#stopRowDragAutoScroll();
+
+        drag.ghost.remove();
+        drag.indicator.remove();
+        drag.sourceElement.classList.remove('vhd-row-drag-source');
+        document.body.classList.remove('vhd-row-dragging');
+
+        const targetIndex = drag.targetIndex;
+        const moved = drag.moved;
+        this.rowDrag = null;
+
+        if (
+            !moved
+            || event.type === 'pointercancel'
+            || !Number.isInteger(targetIndex)
+        ) {
+            return;
+        }
+
+        /*
+         * targetIndex is calculated from the visible row list with the source
+         * row already excluded, so it directly matches the array after splice.
+         */
+        if (targetIndex === drag.rowIndex) {
+            return;
+        }
+
+        this.#remember();
+
+        const [row] = this.project.rows.splice(drag.rowIndex, 1);
+
+        if (!row) {
+            return;
+        }
+
+        const insertionIndex = Math.max(
+            0,
+            Math.min(this.project.rows.length, targetIndex)
+        );
+
+        this.project.rows.splice(insertionIndex, 0, row);
+        this.render();
+    }
+
     removeBlock(rowIndex, columnIndex, blockIndex) {
         this.#remember();
         this.project.rows[rowIndex].columns[columnIndex].blocks.splice(blockIndex, 1);
@@ -658,23 +1810,345 @@ export default class Editor {
         this.render();
     }
 
+    #startBlockDrag(event, rowIndex, columnIndex, blockIndex) {
+        if (event.button !== 0 || this.blockDrag) {
+            return;
+        }
+
+        const sourceElement = event.currentTarget.closest('.vhd-block');
+
+        if (!sourceElement) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const indicator = document.createElement('div');
+        indicator.className = 'vhd-block-drop-indicator';
+
+        const ghost = document.createElement('div');
+        ghost.className = 'vhd-block-drag-ghost';
+        ghost.textContent = this.t.editor.draggingBlock;
+        ghost.style.left = `${event.clientX + 12}px`;
+        ghost.style.top = `${event.clientY + 12}px`;
+        document.body.append(ghost);
+
+        sourceElement.classList.add('vhd-block-drag-source');
+        document.body.classList.add('vhd-block-dragging');
+
+        const drag = {
+            rowIndex,
+            columnIndex,
+            blockIndex,
+            sourceElement,
+            indicator,
+            ghost,
+            target: null,
+            pointerId: event.pointerId,
+            moved: false,
+            startX: event.clientX,
+            startY: event.clientY,
+            clientX: event.clientX,
+            clientY: event.clientY
+        };
+
+        this.blockDrag = drag;
+
+        const onMove = moveEvent => {
+            if (!this.blockDrag || moveEvent.pointerId !== drag.pointerId) {
+                return;
+            }
+
+            const distance = Math.hypot(
+                moveEvent.clientX - drag.startX,
+                moveEvent.clientY - drag.startY
+            );
+
+            if (!drag.moved && distance < 4) {
+                return;
+            }
+
+            drag.moved = true;
+            this.#moveBlockDrag(moveEvent);
+        };
+
+        const onEnd = endEvent => {
+            if (endEvent.pointerId !== drag.pointerId) {
+                return;
+            }
+
+            document.removeEventListener('pointermove', onMove, true);
+            document.removeEventListener('pointerup', onEnd, true);
+            document.removeEventListener('pointercancel', onEnd, true);
+
+            this.#finishBlockDrag(endEvent);
+        };
+
+        document.addEventListener('pointermove', onMove, true);
+        document.addEventListener('pointerup', onEnd, true);
+        document.addEventListener('pointercancel', onEnd, true);
+    }
+
+    #moveBlockDrag(event) {
+        const drag = this.blockDrag;
+
+        if (!drag) {
+            return;
+        }
+
+        event.preventDefault();
+
+        drag.clientX = event.clientX;
+        drag.clientY = event.clientY;
+
+        this.#updateBlockDragAutoScroll(event.clientY);
+
+        drag.ghost.style.left = `${event.clientX + 12}px`;
+        drag.ghost.style.top = `${event.clientY + 12}px`;
+
+        this.#updateBlockDragTarget(event.clientX, event.clientY);
+    }
+
+    #updateBlockDragTarget(clientX, clientY) {
+        const drag = this.blockDrag;
+
+        if (!drag) {
+            return;
+        }
+
+        const hit = document.elementFromPoint(clientX, clientY);
+        const columnElement = hit?.closest?.('.vhd-column');
+
+        if (!columnElement || !this.canvas.contains(columnElement)) {
+            drag.indicator.remove();
+            drag.target = null;
+            return;
+        }
+
+        const targetRowIndex = Number(columnElement.dataset.rowIndex);
+        const targetColumnIndex = Number(columnElement.dataset.columnIndex);
+
+        if (
+            !Number.isInteger(targetRowIndex)
+            || !Number.isInteger(targetColumnIndex)
+        ) {
+            drag.indicator.remove();
+            drag.target = null;
+            return;
+        }
+
+        const blocks = Array.from(
+            columnElement.children
+        ).filter(element =>
+            element.classList?.contains('vhd-block')
+            && element !== drag.sourceElement
+        );
+
+        let targetIndex = blocks.length;
+        let beforeElement = columnElement.querySelector('.vhd-block-add');
+
+        for (let index = 0; index < blocks.length; index += 1) {
+            const rect = blocks[index].getBoundingClientRect();
+
+            if (clientY < rect.top + rect.height / 2) {
+                targetIndex = index;
+                beforeElement = blocks[index];
+                break;
+            }
+        }
+
+        if (beforeElement) {
+            columnElement.insertBefore(drag.indicator, beforeElement);
+        } else {
+            columnElement.append(drag.indicator);
+        }
+
+        drag.target = {
+            rowIndex: targetRowIndex,
+            columnIndex: targetColumnIndex,
+            blockIndex: targetIndex
+        };
+    }
+
+    #updateBlockDragAutoScroll(clientY) {
+        const edge = 90;
+        const viewportHeight = window.innerHeight;
+
+        let direction = 0;
+        let speed = 0;
+
+        if (clientY < edge) {
+            direction = -1;
+            speed = Math.max(
+                8,
+                Math.round(((edge - clientY) / edge) * 44)
+            );
+        } else if (clientY > viewportHeight - edge) {
+            direction = 1;
+            speed = Math.max(
+                8,
+                Math.round(
+                    ((clientY - (viewportHeight - edge)) / edge) * 44
+                )
+            );
+        }
+
+        if (!direction) {
+            this.#stopBlockDragAutoScroll();
+            return;
+        }
+
+        this.blockDragScrollDirection = direction;
+        this.blockDragScrollSpeed = Math.min(44, speed);
+
+        if (this.blockDragScrollFrame) {
+            return;
+        }
+
+        const tick = () => {
+            if (
+                !this.blockDrag
+                || !this.blockDragScrollDirection
+                || !this.blockDragScrollSpeed
+            ) {
+                this.blockDragScrollFrame = null;
+                return;
+            }
+
+            const scrollContainer = this.root.classList.contains('vhd-fullscreen')
+                ? this.canvas
+                : document.scrollingElement;
+
+            if (scrollContainer) {
+                scrollContainer.scrollTop +=
+                    this.blockDragScrollDirection * this.blockDragScrollSpeed;
+            }
+
+            if (
+                this.blockDrag
+                && Number.isFinite(this.blockDrag.clientX)
+                && Number.isFinite(this.blockDrag.clientY)
+            ) {
+                this.#updateBlockDragTarget(
+                    this.blockDrag.clientX,
+                    this.blockDrag.clientY
+                );
+            }
+
+            this.blockDragScrollFrame = requestAnimationFrame(tick);
+        };
+
+        this.blockDragScrollFrame = requestAnimationFrame(tick);
+    }
+
+    #stopBlockDragAutoScroll() {
+        this.blockDragScrollDirection = 0;
+        this.blockDragScrollSpeed = 0;
+
+        if (this.blockDragScrollFrame) {
+            cancelAnimationFrame(this.blockDragScrollFrame);
+            this.blockDragScrollFrame = null;
+        }
+    }
+
+    #finishBlockDrag(event) {
+        const drag = this.blockDrag;
+
+        if (!drag) {
+            return;
+        }
+
+        this.#stopBlockDragAutoScroll();
+
+        drag.ghost.remove();
+        drag.indicator.remove();
+        drag.sourceElement.classList.remove('vhd-block-drag-source');
+        document.body.classList.remove('vhd-block-dragging');
+
+        const target = drag.target;
+        const moved = drag.moved;
+        this.blockDrag = null;
+
+        if (
+            !moved
+            || event.type === 'pointercancel'
+            || !target
+        ) {
+            return;
+        }
+
+        const sourceColumn =
+            this.project.rows?.[drag.rowIndex]?.columns?.[drag.columnIndex];
+
+        const targetColumn =
+            this.project.rows?.[target.rowIndex]?.columns?.[target.columnIndex];
+
+        if (!sourceColumn || !targetColumn) {
+            return;
+        }
+
+        let targetIndex = target.blockIndex;
+
+        /*
+         * target.blockIndex is calculated from a DOM block list that already
+         * excludes the dragged source element. It therefore already matches
+         * the array index after sourceColumn.blocks.splice(..., 1).
+         *
+         * Do not decrement it again when moving downward in the same column.
+         */
+        if (
+            drag.rowIndex === target.rowIndex
+            && drag.columnIndex === target.columnIndex
+            && targetIndex === drag.blockIndex
+        ) {
+            return;
+        }
+
+        this.#remember();
+
+        const [block] = sourceColumn.blocks.splice(drag.blockIndex, 1);
+
+        if (!block) {
+            return;
+        }
+
+        targetIndex = Math.max(
+            0,
+            Math.min(targetColumn.blocks.length, targetIndex)
+        );
+
+        targetColumn.blocks.splice(targetIndex, 0, block);
+        this.render();
+    }
+
     #blockControls(rowIndex, columnIndex, blockIndex) {
         const controls = document.createElement('div');
         controls.className = 'vhd-block-controls';
 
-        const up = this.#miniButton('↑', this.t.editor.moveUp, () => {
-            this.moveBlock(rowIndex, columnIndex, blockIndex, -1);
+        const drag = this.#miniButton('⋮⋮', this.t.editor.dragBlock, () => {});
+        drag.classList.add('vhd-block-drag-handle');
+        drag.setAttribute('aria-label', this.t.editor.dragBlock);
+
+        drag.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
         });
 
-        const down = this.#miniButton('↓', this.t.editor.moveDown, () => {
-            this.moveBlock(rowIndex, columnIndex, blockIndex, 1);
+        drag.addEventListener('pointerdown', event => {
+            this.#startBlockDrag(
+                event,
+                rowIndex,
+                columnIndex,
+                blockIndex
+            );
         });
 
         const remove = this.#miniButton('×', this.t.editor.remove, () => {
             this.removeBlock(rowIndex, columnIndex, blockIndex);
         });
 
-        controls.append(up, down, remove);
+        controls.append(drag, remove);
         return controls;
     }
 
@@ -1348,11 +2822,124 @@ export default class Editor {
 
         element.addEventListener('input', () => {
             block[property] = element.innerHTML;
+            this.#updateDocumentStatistics();
         });
 
         element.addEventListener('blur', () => {
             block[property] = element.innerHTML;
+            this.#updateDocumentStatistics();
         });
+    }
+
+    #renderResizableImage(preview, block, blockElement) {
+        preview.replaceChildren();
+        preview.classList.toggle('is-empty', !block.src);
+
+        if (!block.src) {
+            return;
+        }
+
+        const frame = document.createElement('div');
+        frame.className = 'vhd-image-resize-frame';
+        frame.style.width = `${Math.min(100, Math.max(1, Number(block.properties?.width ?? 100)))}%`;
+
+        const align = block.properties?.align || 'center';
+
+        if (align === 'left') {
+            frame.style.marginLeft = '0';
+            frame.style.marginRight = 'auto';
+        } else if (align === 'right') {
+            frame.style.marginLeft = 'auto';
+            frame.style.marginRight = '0';
+        } else {
+            frame.style.marginLeft = 'auto';
+            frame.style.marginRight = 'auto';
+        }
+
+        const image = document.createElement('img');
+        image.src = block.src;
+        image.alt = block.alt || '';
+        image.draggable = false;
+        image.style.width = '100%';
+        image.style.borderRadius = `${block.properties?.borderRadius ?? 4}px`;
+
+        const updateWidthProperty = width => {
+            const input = this.propertiesPanel?.querySelector(
+                '[data-vhd-property="image-width"]'
+            );
+
+            if (input) {
+                input.value = String(Math.round(width));
+            }
+        };
+
+        const createHandle = side => {
+            const handle = document.createElement('span');
+            handle.className = `vhd-image-resize-handle vhd-image-resize-handle-${side}`;
+            handle.dataset.side = side;
+            handle.title = this.t.properties.resizeImage;
+            handle.setAttribute('aria-hidden', 'true');
+
+            handle.addEventListener('pointerdown', event => {
+                if (event.button !== 0) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+
+                this.#remember();
+
+                const startX = event.clientX;
+                const startWidth = Number(block.properties?.width ?? 100);
+                const containerWidth = preview.clientWidth || 1;
+                const direction = side === 'left' ? -1 : 1;
+
+                frame.classList.add('is-resizing');
+                handle.setPointerCapture?.(event.pointerId);
+
+                const onMove = moveEvent => {
+                    const delta = moveEvent.clientX - startX;
+                    const deltaPercent = (delta / containerWidth) * 100 * direction;
+                    const width = Math.min(
+                        100,
+                        Math.max(5, startWidth + deltaPercent)
+                    );
+
+                    block.properties.width = Math.round(width);
+                    frame.style.width = `${width}%`;
+                    updateWidthProperty(width);
+                };
+
+                const onEnd = endEvent => {
+                    handle.releasePointerCapture?.(endEvent.pointerId);
+                    handle.removeEventListener('pointermove', onMove);
+                    handle.removeEventListener('pointerup', onEnd);
+                    handle.removeEventListener('pointercancel', onEnd);
+                    frame.classList.remove('is-resizing');
+
+                    block.properties.width = Math.round(
+                        Math.min(100, Math.max(5, Number(block.properties.width)))
+                    );
+                    frame.style.width = `${block.properties.width}%`;
+                    updateWidthProperty(block.properties.width);
+                };
+
+                handle.addEventListener('pointermove', onMove);
+                handle.addEventListener('pointerup', onEnd);
+                handle.addEventListener('pointercancel', onEnd);
+            });
+
+            return handle;
+        };
+
+        frame.append(
+            image,
+            createHandle('left'),
+            createHandle('right')
+        );
+
+        preview.append(frame);
     }
 
     #renderBlock(block, rowIndex, columnIndex, blockIndex) {
@@ -1388,94 +2975,13 @@ export default class Editor {
             const preview = document.createElement('div');
             preview.className = 'vhd-image-editor';
 
-            if (block.src) {
-                const image = document.createElement('img');
-                image.src = block.src;
-                image.alt = block.alt || '';
-                image.style.width = `${block.properties?.width ?? 100}%`;
-                image.style.borderRadius = `${block.properties?.borderRadius ?? 4}px`;
-
-                const align = block.properties?.align || 'center';
-
-                if (align === 'left') {
-                    image.style.marginLeft = '0';
-                    image.style.marginRight = 'auto';
-                } else if (align === 'right') {
-                    image.style.marginLeft = 'auto';
-                    image.style.marginRight = '0';
-                } else {
-                    image.style.marginLeft = 'auto';
-                    image.style.marginRight = 'auto';
-                }
-
-                preview.append(image);
-            }
-
-            const url = document.createElement('input');
-            /*
-             * Use a text field rather than type="url": HTML URL inputs
-             * reject valid application-relative paths such as
-             * /bt-content/1/images/example.webp.
-             */
-            url.type = 'text';
-            url.inputMode = 'url';
-            url.autocomplete = 'url';
-            url.placeholder = this.t.editor.imageUrl;
-            url.value = block.src || '';
-            url.addEventListener('change', () => {
-                this.#remember();
-                block.src = url.value.trim();
-                this.render();
-            });
-
-            const alt = document.createElement('input');
-            alt.type = 'text';
-            alt.placeholder = this.t.editor.imageAlt;
-            alt.value = block.alt || '';
-            alt.addEventListener('input', () => {
-                block.alt = alt.value;
-            });
-
-            preview.append(url, alt);
-
-            if (this.options.imageGalleryUrl || typeof this.options.onImageSelect === 'function') {
-                const choose = document.createElement('button');
-                choose.type = 'button';
-                choose.className = 'vhd-secondary-button';
-                choose.textContent = this.t.editor.chooseImage;
-
-                choose.addEventListener('click', async () => {
-                    if (this.options.imageGalleryUrl) {
-                        await this.#openImageGallery({
-                            type: 'block',
-                            block
-                        });
-                        return;
-                    }
-
-                    const selected = await this.options.onImageSelect();
-
-                    if (!selected?.src) {
-                        return;
-                    }
-
-                    this.pendingImageTarget = {
-                        type: 'block',
-                        block
-                    };
-
-                    this.insertImage(selected);
-                });
-
-                preview.append(choose);
-            }
-
+            this.#renderResizableImage(preview, block, wrapper);
             wrapper.append(preview);
         }
 
         if (block.type === 'button') {
-            const editor = document.createElement('div');
-            editor.className = 'vhd-button-editor';
+            const editorPreview = document.createElement('div');
+            editorPreview.className = 'vhd-button-editor';
 
             const preview = document.createElement('a');
             preview.className = 'vhd-preview-button';
@@ -1493,29 +2999,12 @@ export default class Editor {
             preview.style.padding = `${block.properties?.paddingVertical ?? 10}px ${block.properties?.paddingHorizontal ?? 16}px`;
             preview.style.display = 'inline-block';
             preview.style.textDecoration = 'none';
-            editor.style.textAlign = block.properties?.align || 'left';
+            editorPreview.style.textAlign = block.properties?.align || 'left';
+
             preview.addEventListener('click', event => event.preventDefault());
 
-            const text = document.createElement('input');
-            text.type = 'text';
-            text.placeholder = this.t.editor.buttonText;
-            text.value = block.text || '';
-            text.addEventListener('input', () => {
-                block.text = text.value;
-                preview.textContent = text.value || 'Button';
-            });
-
-            const url = document.createElement('input');
-            url.type = 'url';
-            url.placeholder = this.t.editor.buttonUrl;
-            url.value = block.url || '';
-            url.addEventListener('input', () => {
-                block.url = url.value;
-                preview.href = url.value || '#';
-            });
-
-            editor.append(preview, text, url);
-            wrapper.append(editor);
+            editorPreview.append(preview);
+            wrapper.append(editorPreview);
         }
 
         if (block.type === 'code') {
@@ -1529,6 +3018,7 @@ export default class Editor {
             editor.addEventListener('input', () => {
                 block.code = editor.value;
                 editor.rows = Math.max(5, Math.min(18, editor.value.split('\n').length + 1));
+                this.#updateDocumentStatistics();
             });
 
             wrapper.append(editor);
@@ -1543,35 +3033,11 @@ export default class Editor {
         }
 
         if (block.type === 'spacer') {
-            const editor = document.createElement('div');
-            editor.className = 'vhd-spacer-editor';
-
-            const value = document.createElement('span');
-            value.className = 'vhd-spacer-value';
-            value.textContent = `${block.height ?? 32}px`;
-
-            const range = document.createElement('input');
-            range.type = 'range';
-            range.min = '0';
-            range.max = '200';
-            range.step = '4';
-            range.value = String(block.height ?? 32);
-            range.className = 'vhd-spacer-range';
-
             const preview = document.createElement('div');
             preview.className = 'vhd-spacer-preview';
-            preview.style.height = `${range.value}px`;
-
-            range.addEventListener('input', () => {
-                const height = Number(range.value);
-
-                block.height = height;
-                value.textContent = `${height}px`;
-                preview.style.height = `${height}px`;
-            });
-
-            editor.append(value, range);
-            wrapper.append(editor, preview);
+            preview.style.height = `${block.height ?? 32}px`;
+            preview.title = `${block.height ?? 32}px`;
+            wrapper.append(preview);
         }
 
         wrapper.addEventListener('click', event => {
@@ -1600,11 +3066,16 @@ export default class Editor {
         menu.hidden = true;
         menu.setAttribute('role', 'menu');
 
-        for (const type of BlockFactory.types) {
+        const availableTypes = BlockFactory.types.filter(
+            type => !this.disabledContentBlocks.has(type)
+        );
+
+        for (const type of availableTypes) {
             const button = document.createElement('button');
             button.type = 'button';
             button.className = 'vhd-block-add-item';
             button.setAttribute('role', 'menuitem');
+            button.dataset.vhdContentBlock = type;
             button.textContent = this.t.blocks[type];
             button.addEventListener('click', () => {
                 menu.hidden = true;
@@ -1612,6 +3083,11 @@ export default class Editor {
                 this.addBlock(rowIndex, columnIndex, type);
             });
             menu.append(button);
+        }
+
+        if (!availableTypes.length) {
+            wrapper.hidden = true;
+            return wrapper;
         }
 
         trigger.addEventListener('click', event => {
@@ -1668,7 +3144,12 @@ export default class Editor {
             ['four', [1, 1, 1, 1], this.t.layout.four],
             ['five', [1, 1, 1, 1, 1], this.t.layout.five],
             ['six', [1, 1, 1, 1, 1, 1], this.t.layout.six]
-        ];
+        ].filter(([name]) => !this.disabledSections.has(name));
+
+        if (!presets.length) {
+            chooser.hidden = true;
+            return chooser;
+        }
 
         for (const [name, widths, title] of presets) {
             const button = document.createElement('button');
@@ -1692,6 +3173,10 @@ export default class Editor {
 
             button.addEventListener('click', event => {
                 event.stopPropagation();
+                if (this.disabledSections.has(name)) {
+                    return;
+                }
+
                 this.#remember();
                 const row = this.#populateRowWithDefaultText(Grid.createPreset(name));
 
@@ -1721,6 +3206,35 @@ export default class Editor {
         return chooser;
     }
 
+    #normalizeLegacyColumnBackgrounds(project) {
+        if (!project?.rows) {
+            return project;
+        }
+
+        for (const row of project.rows) {
+            for (const column of row.columns ?? []) {
+                column.properties ??= {
+                    backgroundColor: '',
+                    padding: 10
+                };
+
+                /*
+                 * Until 0.6.60, #fafbfc was stored automatically as the
+                 * default column background even though it was intended only
+                 * as an editor aid. Treat that legacy default as transparent.
+                 */
+                if (
+                    !column.properties.backgroundColor
+                    || String(column.properties.backgroundColor).toLowerCase() === '#fafbfc'
+                ) {
+                    column.properties.backgroundColor = '';
+                }
+            }
+        }
+
+        return project;
+    }
+
     render() {
         this.canvas.replaceChildren();
 
@@ -1731,6 +3245,7 @@ export default class Editor {
             content.append(this.#createRowChooser(0));
             this.canvas.append(content);
             this.#syncHistoryButtons();
+            this.#updateDocumentStatistics();
             return;
         }
 
@@ -1749,15 +3264,16 @@ export default class Editor {
             const rowControls = document.createElement('div');
             rowControls.className = 'vhd-row-controls';
 
-            const moveUp = this.#miniButton('↑', this.t.editor.moveRowUp, () => {
-                this.moveRow(rowIndex, -1);
+            const dragRow = this.#miniButton('⋮⋮', this.t.editor.dragRow, () => {});
+            dragRow.classList.add('vhd-row-drag-handle');
+            dragRow.setAttribute('aria-label', this.t.editor.dragRow);
+            dragRow.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
             });
-            moveUp.disabled = rowIndex === 0;
-
-            const moveDown = this.#miniButton('↓', this.t.editor.moveRowDown, () => {
-                this.moveRow(rowIndex, 1);
+            dragRow.addEventListener('pointerdown', event => {
+                this.#startRowDrag(event, rowIndex);
             });
-            moveDown.disabled = rowIndex === this.project.rows.length - 1;
 
             const remove = this.#miniButton('×', this.t.editor.remove, () => {
                 this.removeRow(rowIndex);
@@ -1769,7 +3285,7 @@ export default class Editor {
                 rowControls.append(topChooser);
             }
 
-            rowControls.append(moveUp, moveDown, remove);
+            rowControls.append(dragRow, remove);
             rowElement.append(rowControls);
 
             const grid = document.createElement('div');
@@ -1780,9 +3296,13 @@ export default class Editor {
             row.columns.forEach((column, columnIndex) => {
                 const columnElement = document.createElement('div');
                 columnElement.className = 'vhd-column';
+                columnElement.dataset.rowIndex = String(rowIndex);
+                columnElement.dataset.columnIndex = String(columnIndex);
                 columnElement.style.setProperty('--vhd-span', column.width);
-                column.properties ??= { backgroundColor: '#fafbfc', padding: 10 };
-                columnElement.style.backgroundColor = column.properties.backgroundColor;
+                column.properties ??= { backgroundColor: '', padding: 10 };
+                column.properties.backgroundColor ??= '';
+                columnElement.style.backgroundColor =
+                    column.properties.backgroundColor || '#fafbfc';
                 columnElement.style.padding = `${column.properties.padding ?? 10}px`;
                 columnElement.addEventListener('click', event => {
                     if (event.target === columnElement) {
@@ -1807,6 +3327,7 @@ export default class Editor {
 
         this.canvas.append(content);
         this.#syncHistoryButtons();
+        this.#updateDocumentStatistics();
     }
 
     getData() {
@@ -1821,7 +3342,9 @@ export default class Editor {
         const project = HtmlImporter.fromHtml(html);
 
         this.history.clear();
-        this.project = project || this.#createDefaultProject();
+        this.project = this.#normalizeLegacyColumnBackgrounds(
+            project || this.#createDefaultProject()
+        );
         this.render();
     }
 
@@ -1839,9 +3362,11 @@ export default class Editor {
         }
 
         this.history.clear();
-        this.project = project.rows.length
-            ? structuredClone(project)
-            : this.#createDefaultProject();
+        this.project = this.#normalizeLegacyColumnBackgrounds(
+            project.rows.length
+                ? structuredClone(project)
+                : this.#createDefaultProject()
+        );
         this.render();
     }
 

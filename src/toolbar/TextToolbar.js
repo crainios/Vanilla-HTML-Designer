@@ -297,6 +297,14 @@ export default class TextToolbar {
         });
     }
 
+    #runExternalFormattingCommand(command, value = null) {
+        if (typeof this.actions.formatSelection !== 'function') {
+            return false;
+        }
+
+        return this.actions.formatSelection(command, value) === true;
+    }
+
     #button(label, command, value = null, html = null) {
         const button = document.createElement('button');
         button.type = 'button';
@@ -326,6 +334,10 @@ export default class TextToolbar {
         button.addEventListener('mousedown', event => {
             this.#saveSelection();
             event.preventDefault();
+
+            if (this.#runExternalFormattingCommand(command, value)) {
+                return;
+            }
 
             if (command === 'createLink') {
                 const url = window.prompt('URL');
@@ -413,6 +425,12 @@ export default class TextToolbar {
             button.addEventListener('mousedown', event => {
                 this.#saveSelection();
                 event.preventDefault();
+
+                if (this.#runExternalFormattingCommand(command, null)) {
+                    this.#closeMenus();
+                    return;
+                }
+
                 this.#restoreSelection();
                 document.execCommand(command, false, null);
                 this.#keepSelection();
@@ -748,10 +766,15 @@ export default class TextToolbar {
     }
 
     #applyAlignment(alignment) {
-        if (
-            !(this.activeEditable instanceof HTMLElement)
-            || !['left', 'center', 'right', 'justify'].includes(alignment)
-        ) {
+        if (!['left', 'center', 'right', 'justify'].includes(alignment)) {
+            return;
+        }
+
+        if (this.#runExternalFormattingCommand('alignment', alignment)) {
+            return;
+        }
+
+        if (!(this.activeEditable instanceof HTMLElement)) {
             return;
         }
 
@@ -1513,7 +1536,16 @@ export default class TextToolbar {
         fontFamily.addEventListener('change', () => {
             const selectedFont = fontFamily.value;
 
-            if (!selectedFont || !this.#restoreSelection()) {
+            if (!selectedFont) {
+                return;
+            }
+
+            if (this.#runExternalFormattingCommand('fontName', selectedFont)) {
+                this.fontFamilySelect.value = selectedFont;
+                return;
+            }
+
+            if (!this.#restoreSelection()) {
                 return;
             }
 
@@ -1580,7 +1612,16 @@ export default class TextToolbar {
         fontSize.addEventListener('change', () => {
             const selectedSize = fontSize.value;
 
-            if (!selectedSize || !this.#restoreSelection()) {
+            if (!selectedSize) {
+                return;
+            }
+
+            if (this.#runExternalFormattingCommand('fontSizePt', selectedSize)) {
+                this.fontSizeSelect.value = selectedSize;
+                return;
+            }
+
+            if (!this.#restoreSelection()) {
                 return;
             }
 
@@ -1703,6 +1744,10 @@ export default class TextToolbar {
         color.setAttribute('aria-label', this.t.toolbar.color);
         color.addEventListener('mousedown', () => this.#saveSelection());
         color.addEventListener('input', () => {
+            if (this.#runExternalFormattingCommand('foreColor', color.value)) {
+                return;
+            }
+
             if (!this.#restoreSelection()) {
                 return;
             }
@@ -1724,6 +1769,15 @@ export default class TextToolbar {
         backgroundColor.setAttribute('aria-label', this.t.toolbar.backgroundColor);
         backgroundColor.addEventListener('mousedown', () => this.#saveSelection());
         backgroundColor.addEventListener('input', () => {
+            if (
+                this.#runExternalFormattingCommand(
+                    'hiliteColor',
+                    backgroundColor.value
+                )
+            ) {
+                return;
+            }
+
             if (!this.#restoreSelection()) {
                 return;
             }

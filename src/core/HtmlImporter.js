@@ -268,6 +268,213 @@ function createButtonBlock(element) {
     return block;
 }
 
+function cleanImportedTableCell(cell) {
+    const clone = cell.cloneNode(true);
+
+    clone.querySelectorAll('.vhd-table-cell-menu-trigger')
+        .forEach(element => element.remove());
+
+    return clone.innerHTML;
+}
+
+function createTableBlock(element) {
+    const block = BlockFactory.create('table');
+    const table = element.matches('table')
+        ? element
+        : element.querySelector('table');
+
+    if (!table) {
+        return null;
+    }
+
+    const rowElements = Array.from(table.rows ?? []);
+
+    if (!rowElements.length) {
+        return block;
+    }
+
+    const logicalRows = [];
+
+    const createImportedCell = cell => ({
+        content: cleanImportedTableCell(cell),
+        properties: {
+            ...(cell.style.textAlign
+                ? { textAlign: cell.style.textAlign }
+                : {}),
+            ...(cell.style.verticalAlign
+                ? { verticalAlign: cell.style.verticalAlign }
+                : {}),
+            ...(cell.style.color
+                ? { color: cell.style.color }
+                : {}),
+            ...(cell.style.backgroundColor
+                ? { backgroundColor: cell.style.backgroundColor }
+                : {}),
+            ...(cell.style.borderWidth
+                ? {
+                    borderWidth:
+                        Number.parseFloat(cell.style.borderWidth) || 0
+                }
+                : {}),
+            ...(cell.style.borderStyle
+                ? { borderStyle: cell.style.borderStyle }
+                : {}),
+            ...(cell.style.borderColor
+                ? { borderColor: cell.style.borderColor }
+                : {}),
+            ...(cell.style.borderTopStyle === 'hidden'
+                ? { borderTopEnabled: false }
+                : {}),
+            ...(cell.style.borderRightStyle === 'hidden'
+                ? { borderRightEnabled: false }
+                : {}),
+            ...(cell.style.borderBottomStyle === 'hidden'
+                ? { borderBottomEnabled: false }
+                : {}),
+            ...(cell.style.borderLeftStyle === 'hidden'
+                ? { borderLeftEnabled: false }
+                : {}),
+            ...(cell.style.padding
+                ? {
+                    padding:
+                        Number.parseFloat(cell.style.padding) || 0
+                }
+                : {})
+        }
+    });
+
+    rowElements.forEach((row, rowIndex) => {
+        logicalRows[rowIndex] ??= [];
+        let columnIndex = 0;
+
+        for (const cellElement of Array.from(row.cells ?? [])) {
+            while (logicalRows[rowIndex][columnIndex]) {
+                columnIndex += 1;
+            }
+
+            const cell = createImportedCell(cellElement);
+            const rowSpan = Math.max(
+                1,
+                Number(cellElement.rowSpan || 1)
+            );
+            const colSpan = Math.max(
+                1,
+                Number(cellElement.colSpan || 1)
+            );
+
+            if (rowSpan > 1) {
+                cell.properties.rowspan = rowSpan;
+            }
+
+            if (colSpan > 1) {
+                cell.properties.colspan = colSpan;
+            }
+
+            logicalRows[rowIndex][columnIndex] = cell;
+
+            for (
+                let targetRow = rowIndex;
+                targetRow < rowIndex + rowSpan;
+                targetRow += 1
+            ) {
+                logicalRows[targetRow] ??= [];
+
+                for (
+                    let targetColumn = columnIndex;
+                    targetColumn < columnIndex + colSpan;
+                    targetColumn += 1
+                ) {
+                    if (
+                        targetRow === rowIndex
+                        && targetColumn === columnIndex
+                    ) {
+                        continue;
+                    }
+
+                    logicalRows[targetRow][targetColumn] = {
+                        content: '',
+                        properties: {
+                            mergedInto: {
+                                row: rowIndex,
+                                column: columnIndex
+                            }
+                        }
+                    };
+                }
+            }
+
+            columnIndex += colSpan;
+        }
+    });
+
+    const logicalColumnCount = Math.max(
+        1,
+        ...logicalRows.map(row => row.length)
+    );
+
+    block.rows = logicalRows.map(row =>
+        Array.from(
+            { length: logicalColumnCount },
+            (_, columnIndex) =>
+                row[columnIndex]
+                || { content: '', properties: {} }
+        )
+    );
+
+    block.properties.header =
+        Array.from(rowElements[0]?.cells ?? [])
+            .some(cell => cell.tagName === 'TH');
+
+    const columnCount = block.rows?.[0]?.length ?? 0;
+    const cols = Array.from(
+        table.querySelectorAll(':scope > colgroup > col')
+    );
+
+    if (columnCount > 0 && cols.length === columnCount) {
+        const widths = cols.map(col =>
+            Number.parseFloat(col.style.width)
+        );
+
+        if (
+            widths.every(value => Number.isFinite(value) && value > 0)
+        ) {
+            const total = widths.reduce((sum, value) => sum + value, 0);
+
+            block.properties.columnWidths = total > 0
+                ? widths.map(value => (value / total) * 100)
+                : widths;
+        }
+    }
+
+    const firstCell = rowElements[0]?.cells?.[0];
+
+    if (firstCell) {
+        if (firstCell.style.borderColor) {
+            block.properties.borderColor = firstCell.style.borderColor;
+        }
+
+        if (firstCell.style.borderWidth) {
+            block.properties.borderWidth =
+                Number.parseFloat(firstCell.style.borderWidth) || 1;
+        }
+
+        if (firstCell.style.padding) {
+            block.properties.cellPadding =
+                Number.parseFloat(firstCell.style.padding) || 8;
+        }
+
+        if (
+            block.properties.header
+            && firstCell.style.backgroundColor
+        ) {
+            block.properties.headerBackground =
+                firstCell.style.backgroundColor;
+        }
+    }
+
+    return block;
+}
+
 function isStandaloneImage(element) {
     if (element.tagName === 'IMG') {
         return true;
@@ -327,6 +534,20 @@ function nodesToBlocks(nodes) {
         if (/^h[1-6]$/.test(tag)) {
             flushText();
             blocks.push(createHeadingBlock(element));
+            continue;
+        }
+
+        if (
+            tag === 'table'
+            || element.classList.contains('vhd-table-wrap')
+        ) {
+            flushText();
+            const table = createTableBlock(element);
+
+            if (table) {
+                blocks.push(table);
+            }
+
             continue;
         }
 

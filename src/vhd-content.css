@@ -181,7 +181,6 @@
 .vhd-content td {
     padding: .5em .65em;
     border: 1px solid #d8dde5;
-    vertical-align: top;
 }
 
 /*
@@ -200,4 +199,33 @@
     .vhd-content blockquote {
         margin-left: 0;
     }
+}
+
+
+.vhd-content .vhd-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.vhd-content .vhd-table {
+    width: 100%;
+    max-width: 100%;
+    border-collapse: collapse;
+}
+
+
+/* 0.6.95 — explicit table-cell vertical alignment */
+.vhd-content th.vhd-valign-top,
+.vhd-content td.vhd-valign-top {
+    vertical-align: top !important;
+}
+
+.vhd-content th.vhd-valign-middle,
+.vhd-content td.vhd-valign-middle {
+    vertical-align: middle !important;
+}
+
+.vhd-content th.vhd-valign-bottom,
+.vhd-content td.vhd-valign-bottom {
+    vertical-align: bottom !important;
 }

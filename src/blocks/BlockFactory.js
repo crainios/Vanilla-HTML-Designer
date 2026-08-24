@@ -5,6 +5,7 @@ import createButtonBlock from './ButtonBlock.js';
 import createDividerBlock from './DividerBlock.js';
 import createSpacerBlock from './SpacerBlock.js';
 import createCodeBlock from './CodeBlock.js';
+import createTableBlock from './TableBlock.js';
 
 const factories = {
     text: createTextBlock,
@@ -13,7 +14,8 @@ const factories = {
     button: createButtonBlock,
     divider: createDividerBlock,
     spacer: createSpacerBlock,
-    code: createCodeBlock
+    code: createCodeBlock,
+    table: createTableBlock
 };
 
 export default class BlockFactory {

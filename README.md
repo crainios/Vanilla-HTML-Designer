@@ -921,3 +921,448 @@ Controls are now:
 ```
 
 The first zone still keeps its Add Zone control.
+
+
+## Tables
+
+Since 0.6.65, VHD includes a structured Table block. New tables use a 3 × 3
+layout, with the first row configured as a semantic header by default.
+
+Cells are edited directly in the canvas. The Properties panel provides:
+
+- header row on/off;
+- border color and width;
+- cell padding;
+- header background;
+- add/remove row;
+- add/remove column.
+
+The JSON keeps table rows and cells as structured data, while public output uses
+semantic HTML table elements. The block can be disabled with:
+
+```js
+disabledContentBlocks: ['table']
+```
+
+This first table implementation intentionally does not yet include merged cells,
+per-cell styling or arbitrary row/column insertion positions.
+
+
+### Contextual row and column editing
+
+Since 0.6.66, table structure actions apply to the currently selected cell:
+
+- add row above;
+- add row below;
+- remove current row;
+- add column left;
+- add column right;
+- remove current column.
+
+The selected cell is highlighted in the canvas. A table always retains at least
+one row and one column.
+
+
+### Table contextual structure menu
+
+Since 0.6.67, structural table editing is no longer mixed with visual
+properties. Right-click a cell, or use the visible `⋮` trigger on the selected
+cell, to access:
+
+- add row above;
+- add row below;
+- remove current row;
+- add column left;
+- add column right;
+- remove current column.
+
+The Properties panel only contains table appearance/configuration settings.
+
+
+### Editor-only table controls
+
+Since 0.6.68, contextual table controls are structurally separated from editable
+cell content. The `⋮` trigger exists only in the editor DOM and is never part of
+the JSON cell content or public HTML.
+
+Projects saved with 0.6.67 are cleaned automatically when loaded/exported.
+
+
+### Table column widths
+
+Since 0.6.69, each table column has a percentage width. Select a cell and open
+its contextual menu to change the width of that column.
+
+When a column width is changed, VHD automatically redistributes the remaining
+percentage among the other columns so the total remains 100%. The contextual
+menu also provides `Répartir les colonnes également`.
+
+Widths are stored as:
+
+```json
+"columnWidths": [25, 50, 25]
+```
+
+and are exported through a semantic `<colgroup>`.
+
+
+### Central contextual table toolbar
+
+Since 0.6.70, tables use a single toolbar centered above the table instead of a
+menu on every cell. The toolbar becomes active according to the cell containing
+the cursor.
+
+It provides contextual row actions, contextual column actions, column width in
+percent, and equal-width redistribution. Changing the numeric width updates the
+table directly, so the toolbar remains visible while using the input arrows.
+
+
+### Table toolbar position and cell focus
+
+Since 0.6.71, the contextual table toolbar is positioned closer to the top of
+the table block. Clicking anywhere in a table cell reliably focuses the inner
+editable content, while direct clicks inside that content retain normal caret
+placement.
+
+
+### Direct table cell editing
+
+Since 0.6.72, table `<th>` and `<td>` elements are directly contenteditable
+again. The central table toolbar is completely outside cell content and uses
+the existing block-control line, eliminating the additional vertical gap above
+the table.
+
+
+### Visible table toolbar with horizontal scrolling
+
+Since 0.6.73, horizontal scrolling belongs to the inner `.vhd-table-scroll`
+container rather than `.vhd-table-editor`. This allows the contextual toolbar
+to sit above the table without being clipped by overflow.
+
+
+### Multi-cell table selection
+
+Since 0.6.74, table cells can be selected as a temporary rectangular range:
+
+- click: select one cell;
+- Shift + click: extend from the anchor cell to a rectangular range.
+
+The selection itself is never stored. Each selected cell keeps its own
+independent properties, for example:
+
+```json
+{
+  "content": "Text",
+  "properties": {
+    "textAlign": "center",
+    "verticalAlign": "middle",
+    "color": "#1f2937",
+    "backgroundColor": "#ffffff"
+  }
+}
+```
+
+Horizontal alignment, vertical alignment, text color and cell background can be
+applied to the complete temporary selection. Structural row/column operations
+and column width controls are disabled while more than one cell is selected.
+
+
+### Main toolbar and multi-cell formatting
+
+Since 0.6.75, the table toolbar contains structure controls only. Formatting is
+not duplicated there.
+
+With a rectangular multi-cell selection, the main VHD toolbar applies compatible
+formats to every selected cell independently:
+
+- bold, italic, underline and strike-through;
+- superscript and subscript;
+- font family and font size;
+- text color and background color;
+- horizontal alignment.
+
+The temporary selection is not persisted. Each cell keeps its own properties
+and HTML content.
+
+
+### Persistent multi-cell formatting selection
+
+Since 0.6.76, a rectangular table-cell selection remains active while the user
+applies several formatting commands from the main toolbar. Browser focus and
+DOM selection changes used internally to format each contenteditable cell do
+not alter the editor-level cell range.
+
+
+### Mouse table selection and column resizing
+
+Since 0.6.77:
+
+- click keeps normal single-cell editing;
+- Shift + click keeps rectangular range selection;
+- dragging from a cell across other cells creates a rectangular temporary selection;
+- dragging a separator between columns resizes the two adjacent columns.
+
+Column resizing preserves the combined percentage of the two affected columns,
+with a 5% minimum per column, and writes the result to `columnWidths`.
+
+
+### Per-cell table borders
+
+Since 0.6.78, each table cell can independently store:
+
+```json
+"properties": {
+  "borderWidth": 2,
+  "borderStyle": "dashed",
+  "borderColor": "#6b7280"
+}
+```
+
+When several cells are selected, the properties panel applies the chosen border
+settings independently to each selected cell. No group object is created.
+
+Cells without explicit border properties continue to use the table-level
+border settings.
+
+
+### Compact border properties heading
+
+Since 0.6.79, the contextual cell-border subsection is simply titled
+`Bordures`, without displaying the number of selected cells.
+
+
+### Merge and unmerge table cells
+
+Since 0.6.80, a rectangular selection of unmerged cells can be merged with the
+contextual table toolbar. The top-left cell becomes the visible anchor:
+
+```json
+{
+  "content": "Visible content",
+  "properties": {
+    "rowspan": 2,
+    "colspan": 3
+  }
+}
+```
+
+Covered cells remain in the logical JSON grid and contain:
+
+```json
+"mergedInto": {
+  "row": 0,
+  "column": 0
+}
+```
+
+Their original content and properties are therefore not destroyed. When the
+merged cell is separated, the underlying cells become visible again.
+
+Public HTML uses standard `rowspan` and `colspan`. HTML import reconstructs the
+logical grid from these attributes.
+
+For structural safety in 0.6.80, adding/removing rows or columns is disabled
+while a table contains merged cells; unmerge first before changing the grid.
+
+
+### Merged cell content
+
+Since 0.6.81, merging cells keeps all non-empty source contents visible in the
+merged cell. They are combined in reading order and separated with `<br>`.
+
+Example:
+
+```text
+Cell A | Cell B
+Cell C | Cell D
+```
+
+becomes:
+
+```html
+Cell A<br>Cell B<br>Cell C<br>Cell D
+```
+
+The user can then decide what to keep or remove.
+
+The original logical-cell contents are still preserved so that unmerging can
+restore the original grid.
+
+
+### Visible empty table rows
+
+Since 0.6.82, empty table cells keep a minimum editor height of 34px. This
+makes newly inserted empty rows and empty merged cells clearly visible and
+clickable.
+
+This visual aid exists only in the editor and does not affect exported HTML.
+
+
+### Deleting rows and columns with merged cells
+
+Since 0.6.83, rows and columns can be deleted even when the table contains
+merged cells. VHD recalculates `rowspan`, `colspan` and `mergedInto`
+coordinates automatically.
+
+If the deleted row or column contains the merge anchor, the next surviving
+logical cell becomes the new anchor while preserving the visible merged
+content.
+
+Adding rows or columns while merges exist remains intentionally disabled for
+now.
+
+
+### Adding rows and columns with merged cells
+
+Since 0.6.84, adding rows and columns is compatible with merged cells.
+
+- Insertion before a merge shifts its logical anchor.
+- Insertion inside a merge expands its `rowspan` or `colspan`.
+- `mergedInto` coordinates are rebuilt automatically.
+- Existing contents and properties remain preserved.
+
+Together with 0.6.83, all four structural operations — add/remove row and
+add/remove column — now work with merged cells.
+
+
+### Quick table selection and Tab row creation
+
+Since 0.6.85, the contextual table toolbar provides:
+
+- `L` — select the current logical row;
+- `C` — select the current logical column;
+- `▦` — select the entire table.
+
+These commands use the existing temporary multi-cell selection; no selection
+group is stored in JSON.
+
+Native `Tab` / `Shift+Tab` navigation remains unchanged. When `Tab` is pressed
+from the logical bottom-right cell, VHD automatically creates a new row and
+places the caret in its first cell. This also works when the final visible
+cell is a merged cell covering the bottom-right logical position.
+
+
+### Ergonomic row, column and table selection
+
+Since 0.6.86, row/column/table selection no longer uses `L`, `C` or `▦`
+buttons in the contextual toolbar.
+
+Instead:
+
+- hover the left margin of a row, then click to select that row;
+- hover just above a column, then click to select that column;
+- hover the top-left corner, then click to select the whole table.
+
+These controls are editor-only overlays and are never exported in public HTML.
+They use the same transient logical selection model as drag and Shift+click.
+
+
+### Visible table selectors and inherited Tab row formatting
+
+Since 0.6.87, the row/column/table selector overlay is attached to the outer
+table editor, so its margins are no longer clipped by horizontal scrolling.
+
+A row created automatically with `Tab` from the final cell inherits the visual
+properties of the previous last row while remaining empty. Merge metadata is
+explicitly excluded from this inheritance.
+
+
+### Reliable row selection margin
+
+Since 0.6.88, row selectors are positioned from the rendered row rectangles
+relative to the table. This makes the left-margin row-selection controls
+reliable even when the selector overlay is outside the scrolling wrapper.
+
+
+### Dedicated row-selector gutter
+
+Since 0.6.89, the editor reserves an 18px left gutter beside tables. Row
+selectors live inside this gutter instead of outside the block, making them
+reliably visible and clickable without affecting exported HTML.
+
+
+### Row selector DOM compatibility
+
+Since 0.6.90, row-selector geometry uses `table.rows` rather than requiring
+rows to be inside a `<tbody>`. This supports both editor-created tables and
+browser/imported table structures.
+
+
+### Compact table selector gutter
+
+Since 0.6.91, the editor-only row-selector gutter is 12px wide instead of
+18px. This keeps row selection discoverable while reducing unused space.
+
+
+### Compact SVG table toolbar
+
+Since 0.6.92, the contextual table toolbar uses compact blue buttons with
+white inline SVG icons. The icons are embedded directly in the editor,
+require no external library, and retain accessible titles/ARIA labels.
+
+
+### Table text selection and toolbar spacing
+
+Since 0.6.93, dragging inside a non-empty table cell keeps native browser text
+selection. Rectangular table-cell selection remains available with Shift+click
+and the row/column/table selectors, and mouse dragging can still start from an
+empty cell.
+
+The editor also adds an 8px top gutter between the contextual table toolbar and
+the table itself.
+
+
+### Per-cell padding and vertical alignment
+
+Since 0.6.94, selected table cells expose:
+
+- cell padding;
+- vertical alignment (`top`, `middle`, `bottom`).
+
+Each selected cell stores the values independently. Without a cell-specific
+padding value, the table-level `cellPadding` remains the fallback.
+
+The editor-only top gutter below the contextual table toolbar is now 12px.
+
+
+### Vertical alignment and structural actions
+
+Since 0.6.95, exported table cells carry explicit vertical-alignment classes
+(`vhd-valign-top`, `vhd-valign-middle`, `vhd-valign-bottom`) handled by
+`vhd-content.css`, ensuring identical behavior in Preview and public output.
+
+A complete row selection keeps row add/remove actions enabled, and a complete
+column selection keeps column add/remove actions enabled.
+
+
+### Persistent table-cell horizontal alignment
+
+Since 0.6.96, horizontal alignment applied to a single table cell is stored in
+the cell's `properties.textAlign`, exactly like a multi-cell selection. It
+therefore survives JSON saving, re-rendering, Preview and HTML export.
+
+
+### Logical-grid selection with merged cells
+
+Since 0.6.97, mouse-drag table selection resolves its target from the logical
+row/column grid rather than the DOM cell under the pointer. This keeps
+rectangular selection usable even where `rowspan` or `colspan` hides logical
+cells from the rendered DOM.
+
+
+### Text selection and cell-range drag
+
+Since 0.6.98, a mouse drag inside a table cell determines its intent
+dynamically. As long as the pointer remains in the starting logical cell, the
+browser selects text normally. As soon as the pointer crosses into another
+logical cell, VHD switches to rectangular cell selection.
+
+
+### Delete selected cell contents and independent borders
+
+Since 0.6.99, pressing `Delete` while a multi-cell table range is active clears
+the selected cell contents while preserving structure and formatting.
+
+Table-cell borders can also be enabled or disabled independently on the Top,
+Right, Bottom and Left sides. Disabled edges use CSS `hidden` so collapsed
+table borders cannot be restored by the neighbouring cell.

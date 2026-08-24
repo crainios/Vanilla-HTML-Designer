@@ -135,7 +135,7 @@
 }
 
 .vhd-toolbar-button svg {
-    width: 18px;
+    width: 12px;
     height: 18px;
     fill: currentColor;
 }
@@ -251,7 +251,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 5px;
-    padding-top: 8px;
+    padding-top: 12px;
     border-top: 1px solid #e5e7eb;
     color: var(--vhd-muted);
     font-size: .875rem;
@@ -477,7 +477,7 @@
 }
 
 .vhd-toolbar-menu-icon svg {
-    width: 18px;
+    width: 12px;
     height: 18px;
     fill: currentColor;
 }
@@ -503,7 +503,7 @@
 }
 
 .vhd-toolbar-color-control svg {
-    width: 18px;
+    width: 12px;
     height: 18px;
     fill: currentColor;
     pointer-events: none;
@@ -1446,7 +1446,7 @@
 }
 
 .vhd-custom-action-icon svg {
-    width: 18px;
+    width: 12px;
     height: 18px;
 }
 
@@ -2119,7 +2119,7 @@
 /* 0.6.51 — superscript/subscript toolbar icons */
 .vhd-toolbar-script-icon {
     display: inline-block;
-    min-width: 18px;
+    min-width: 12px;
     font-size: .82rem;
     font-weight: 600;
     line-height: 1;
@@ -2229,7 +2229,7 @@
 
 @media (pointer: coarse) {
     .vhd-image-resize-handle {
-        width: 18px;
+        width: 12px;
         height: 36px;
     }
 
@@ -2335,4 +2335,794 @@ body.vhd-block-dragging {
 
 body.vhd-row-dragging {
     cursor: grabbing;
+}
+
+
+/* 0.6.65 — table block */
+.vhd-table-editor {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.vhd-table-editor .vhd-table {
+    width: 100%;
+    max-width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+}
+
+.vhd-table-editor th,
+.vhd-table-editor td {
+    min-width: 70px;
+    outline: none;
+}
+
+.vhd-table-editor th:focus,
+.vhd-table-editor td:focus {
+    box-shadow: inset 0 0 0 2px rgba(37, 99, 235, .35);
+}
+
+
+/* 0.6.66 — contextual table editing */
+.vhd-table-editor .vhd-table-cell-selected {
+    position: relative;
+    box-shadow: inset 0 0 0 2px rgba(37, 99, 235, .45);
+}
+
+.vhd-table-editor .vhd-table-cell-selected::after {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border: 1px dashed rgba(37, 99, 235, .28);
+    pointer-events: none;
+}
+
+
+/* 0.6.67 — table contextual structure menu */
+.vhd-table-editor th,
+.vhd-table-editor td {
+    position: relative;
+}
+
+.vhd-table-cell-menu-trigger {
+    display: none;
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    z-index: 2;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, .92);
+    color: #4b5563;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
+}
+
+.vhd-table-cell-selected > .vhd-table-cell-menu-trigger,
+.vhd-table-editor th:hover > .vhd-table-cell-menu-trigger,
+.vhd-table-editor td:hover > .vhd-table-cell-menu-trigger {
+    display: block;
+}
+
+.vhd-table-cell-menu-trigger:hover,
+.vhd-table-cell-menu-trigger:focus {
+    background: #e5e7eb;
+}
+
+.vhd-table-context-menu {
+    position: fixed;
+    z-index: 2147483002;
+    min-width: 220px;
+    padding: 5px;
+    border: 1px solid var(--vhd-border);
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .18);
+}
+
+.vhd-table-context-item {
+    display: block;
+    width: 100%;
+    padding: 7px 9px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #1f2937;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.vhd-table-context-item:hover,
+.vhd-table-context-item:focus {
+    background: #f3f4f6;
+    outline: none;
+}
+
+.vhd-table-context-item:disabled {
+    color: #9ca3af;
+    cursor: default;
+    background: transparent;
+}
+
+.vhd-table-context-separator {
+    height: 1px;
+    margin: 5px 3px;
+    background: #e5e7eb;
+}
+
+
+/* 0.6.68 — keep table editor controls outside saved cell content */
+.vhd-table-cell-content {
+    display: block;
+    width: 100%;
+    min-height: 1.4em;
+    outline: none;
+    cursor: text;
+}
+
+.vhd-table-cell-selected > .vhd-table-cell-content:focus {
+    outline: none;
+}
+
+
+/* 0.6.69 — table column widths */
+.vhd-table-context-width {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 9px;
+    color: #374151;
+    font-size: .875rem;
+}
+
+.vhd-table-context-width-input {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.vhd-table-context-width input {
+    width: 62px;
+    padding: 4px 5px;
+    border: 1px solid var(--vhd-border);
+    border-radius: 4px;
+    font: inherit;
+    text-align: right;
+}
+
+.vhd-table-context-width input:focus {
+    outline: 2px solid rgba(37, 99, 235, .22);
+    outline-offset: 1px;
+}
+
+
+/* 0.6.70 — one contextual toolbar per table */
+.vhd-table-editor {
+    position: relative;
+    padding-top: 0;
+}
+
+.vhd-table-toolbar[hidden] {
+    display: none;
+}
+
+.vhd-table-toolbar {
+    position: absolute;
+    top: -34px;
+    left: 50%;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    transform: translateX(-50%);
+    max-width: calc(100% - 8px);
+    padding: 4px 5px;
+    border: 1px solid var(--vhd-border);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, .97);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, .12);
+    white-space: nowrap;
+}
+
+.vhd-table-toolbar-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 27px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #374151;
+    font: inherit;
+    font-size: .82rem;
+    cursor: pointer;
+}
+
+.vhd-table-toolbar-button:hover,
+.vhd-table-toolbar-button:focus {
+    background: #e5e7eb;
+    outline: none;
+}
+
+.vhd-table-toolbar-button:disabled {
+    color: #9ca3af;
+    cursor: default;
+    background: transparent;
+}
+
+.vhd-table-toolbar-separator {
+    width: 1px;
+    height: 20px;
+    margin: 0 2px;
+    background: #d1d5db;
+}
+
+.vhd-table-toolbar-width {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0 2px;
+    color: #4b5563;
+    font-size: .78rem;
+}
+
+.vhd-table-toolbar-width-input {
+    width: 56px;
+    height: 27px;
+    padding: 2px 4px;
+    border: 1px solid var(--vhd-border);
+    border-radius: 4px;
+    background: #fff;
+    font: inherit;
+    text-align: right;
+}
+
+.vhd-table-toolbar-width-input:focus {
+    border-color: #9ca3af;
+    outline: 2px solid rgba(37, 99, 235, .18);
+    outline-offset: 0;
+}
+
+/* 0.6.67/0.6.69 per-cell popup controls are no longer used. */
+.vhd-table-cell-menu-trigger,
+.vhd-table-context-menu {
+    display: none !important;
+}
+
+@media (max-width: 720px) {
+    .vhd-table-editor {
+        padding-top: 0;
+    }
+
+    .vhd-table-toolbar {
+        top: -68px;
+        flex-wrap: wrap;
+        justify-content: center;
+        white-space: normal;
+    }
+}
+
+
+/* 0.6.72 — table cells themselves are editable again */
+.vhd-table-editor th[contenteditable="true"],
+.vhd-table-editor td[contenteditable="true"] {
+    cursor: text;
+    outline: none;
+}
+
+.vhd-table-editor th[contenteditable="true"]:focus,
+.vhd-table-editor td[contenteditable="true"]:focus {
+    outline: none;
+}
+
+/*
+ * The toolbar occupies the existing block-control line instead of reserving
+ * an additional row above the table.
+ */
+.vhd-block-table.vhd-selected .vhd-table-toolbar,
+.vhd-block-table:focus-within .vhd-table-toolbar {
+    top: -34px;
+}
+
+
+/* 0.6.73 — keep contextual table toolbar visible above the table */
+.vhd-table-editor {
+    position: relative;
+    padding-top: 0;
+    overflow: visible;
+}
+
+.vhd-table-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+}
+
+.vhd-table-toolbar {
+    top: -34px;
+    overflow: visible;
+}
+
+
+/* 0.6.74 — rectangular multi-cell selection */
+.vhd-table-editor .vhd-table-cell-selected {
+    box-shadow:
+        inset 0 0 0 2px rgba(37, 99, 235, .48),
+        inset 0 0 0 9999px rgba(37, 99, 235, .055);
+}
+
+
+
+/* 0.6.77 — mouse cell selection and direct column resizing */
+.vhd-table-scroll {
+    position: relative;
+}
+
+.vhd-table-resize-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 4;
+    pointer-events: none;
+}
+
+.vhd-table-column-resize-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 9px;
+    margin-left: -4.5px;
+    pointer-events: auto;
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.vhd-table-column-resize-handle::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 1px;
+    background: transparent;
+}
+
+.vhd-table-column-resize-handle:hover::after,
+.vhd-table-column-resize-handle.is-resizing::after {
+    background: rgba(37, 99, 235, .72);
+}
+
+.vhd-table-resizing-column,
+.vhd-table-resizing-column * {
+    cursor: col-resize !important;
+}
+
+.vhd-table-selecting-cells,
+.vhd-table-selecting-cells th,
+.vhd-table-selecting-cells td {
+    user-select: none;
+    cursor: cell;
+}
+
+.vhd-table-selecting-cells .vhd-table-cell-selected {
+    box-shadow:
+        inset 0 0 0 2px rgba(37, 99, 235, .58),
+        inset 0 0 0 9999px rgba(37, 99, 235, .075);
+}
+
+
+/* 0.6.79 — compact property subsection titles */
+.vhd-property-subtitle {
+    margin: 10px 0 4px;
+    color: var(--vhd-muted);
+    font-size: .78rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-transform: none;
+}
+
+
+/* 0.6.80 — merged table cells */
+.vhd-table-editor th[rowspan],
+.vhd-table-editor td[rowspan],
+.vhd-table-editor th[colspan],
+.vhd-table-editor td[colspan] {
+    position: relative;
+}
+
+.vhd-table-editor th[rowspan].vhd-table-cell-selected,
+.vhd-table-editor td[rowspan].vhd-table-cell-selected,
+.vhd-table-editor th[colspan].vhd-table-cell-selected,
+.vhd-table-editor td[colspan].vhd-table-cell-selected {
+    box-shadow:
+        inset 0 0 0 2px rgba(37, 99, 235, .58),
+        inset 0 0 0 9999px rgba(37, 99, 235, .06);
+}
+
+
+/* 0.6.82 — keep empty table rows clearly visible in the editor */
+.vhd-table-editor th,
+.vhd-table-editor td {
+    height: 34px;
+    min-height: 34px;
+    box-sizing: border-box;
+}
+
+/*
+ * Empty editable cells must remain large enough to be obvious and clickable.
+ * This is editor-only presentation and is not exported to public HTML.
+ */
+.vhd-table-editor th:empty::before,
+.vhd-table-editor td:empty::before {
+    content: "\00a0";
+    display: inline-block;
+    min-height: 1em;
+}
+
+
+/* 0.6.85 — quick table range selection */
+.vhd-table-toolbar-button[aria-label="Sélectionner la ligne"],
+.vhd-table-toolbar-button[aria-label="Sélectionner la colonne"],
+.vhd-table-toolbar-button[aria-label="Sélectionner tout le tableau"],
+.vhd-table-toolbar-button[aria-label="Select row"],
+.vhd-table-toolbar-button[aria-label="Select column"],
+.vhd-table-toolbar-button[aria-label="Select entire table"] {
+    font-weight: 700;
+}
+
+
+/* 0.6.86 — table selection from row/column margins */
+.vhd-table-selection-layer {
+    position: absolute;
+    z-index: 3;
+    pointer-events: none;
+    overflow: visible;
+}
+
+.vhd-table-selection-handle {
+    position: absolute;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    opacity: 0;
+    pointer-events: auto;
+    transition:
+        opacity .12s ease,
+        background-color .12s ease;
+}
+
+.vhd-table-selection-handle:hover,
+.vhd-table-selection-handle:focus {
+    opacity: 1;
+    outline: none;
+}
+
+.vhd-table-column-selectors {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 0;
+    pointer-events: none;
+}
+
+.vhd-table-column-selector {
+    top: -14px;
+    height: 12px;
+    cursor: pointer;
+    border-bottom: 2px solid rgba(37, 99, 235, .62);
+}
+
+.vhd-table-column-selector::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 1px;
+    width: 0;
+    height: 0;
+    transform: translateX(-50%);
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid rgba(37, 99, 235, .72);
+}
+
+.vhd-table-row-selectors {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.vhd-table-row-selector {
+    left: -14px;
+    width: 12px;
+    cursor: pointer;
+    border-right: 2px solid rgba(37, 99, 235, .62);
+}
+
+.vhd-table-row-selector::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 1px;
+    width: 0;
+    height: 0;
+    transform: translateY(-50%);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 5px solid rgba(37, 99, 235, .72);
+}
+
+.vhd-table-all-selector {
+    top: -14px;
+    left: -14px;
+    width: 12px;
+    height: 12px;
+    cursor: pointer;
+    border-right: 2px solid rgba(37, 99, 235, .62);
+    border-bottom: 2px solid rgba(37, 99, 235, .62);
+}
+
+.vhd-table-all-selector::after {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border: 1px solid rgba(37, 99, 235, .72);
+}
+
+/*
+ * Make the interaction discoverable without leaving permanent chrome:
+ * entering the table editor reveals the very subtle selectors, while the
+ * active selector becomes fully visible on hover/focus.
+ */
+.vhd-table-editor:hover .vhd-table-selection-handle {
+    opacity: .18;
+}
+
+.vhd-table-editor:hover .vhd-table-selection-handle:hover,
+.vhd-table-editor .vhd-table-selection-handle:focus {
+    opacity: 1;
+}
+
+.vhd-table-selection-handle:focus-visible {
+    opacity: 1;
+    outline: 2px solid rgba(37, 99, 235, .35);
+    outline-offset: 1px;
+}
+
+/* Column-resize handles must remain above selection margins. */
+.vhd-table-resize-layer {
+    z-index: 4;
+}
+
+
+/* 0.6.87 — selectors live outside the scrolling table viewport */
+.vhd-table-editor {
+    overflow: visible;
+}
+
+.vhd-table-selection-layer {
+    overflow: visible;
+}
+
+.vhd-table-row-selector,
+.vhd-table-column-selector,
+.vhd-table-all-selector {
+    z-index: 6;
+}
+
+/*
+ * Slightly increase the discoverable hit zone while keeping the visual marker
+ * discreet. The visible arrow/line is still only revealed on hover.
+ */
+.vhd-table-column-selector {
+    top: -18px;
+    height: 16px;
+}
+
+.vhd-table-row-selector {
+    left: -12px;
+    width: 16px;
+}
+
+.vhd-table-all-selector {
+    top: -18px;
+    left: -12px;
+    width: 16px;
+    height: 16px;
+}
+
+
+/* 0.6.88 — reliable row selector geometry */
+.vhd-table-row-selector {
+    display: block;
+    min-height: 12px;
+}
+
+.vhd-table-editor:hover .vhd-table-row-selector {
+    opacity: .24;
+}
+
+.vhd-table-editor .vhd-table-row-selector:hover,
+.vhd-table-editor .vhd-table-row-selector:focus {
+    opacity: 1;
+}
+
+
+/* 0.6.89 — dedicated editor gutter for reliable row selectors */
+.vhd-table-editor {
+    padding-left: 12px;
+    box-sizing: border-box;
+}
+
+/*
+ * The table and selector layer are shifted together by the editor gutter.
+ * Row selectors now occupy real editor space instead of relying on negative
+ * overflow outside the block.
+ */
+.vhd-table-row-selector {
+    left: -12px;
+    width: 12px;
+    opacity: 0;
+}
+
+.vhd-table-editor:hover .vhd-table-row-selector {
+    opacity: .22;
+}
+
+.vhd-table-editor .vhd-table-row-selector:hover,
+.vhd-table-editor .vhd-table-row-selector:focus {
+    opacity: 1;
+    background: rgba(37, 99, 235, .06);
+}
+
+/* Keep the visible indicator centered inside the gutter. */
+.vhd-table-row-selector::after {
+    right: 2px;
+}
+
+/*
+ * The corner selector must follow the same gutter so selecting the whole
+ * table remains visually aligned with row selectors.
+ */
+.vhd-table-all-selector {
+    left: -12px;
+    width: 12px;
+}
+
+
+/* 0.6.91 — compact row-selector gutter */
+.vhd-table-editor {
+    padding-left: 12px;
+}
+
+.vhd-table-row-selector {
+    left: -12px;
+    width: 12px;
+}
+
+.vhd-table-row-selector::after {
+    right: 2px;
+}
+
+.vhd-table-all-selector {
+    left: -12px;
+    width: 12px;
+}
+
+
+/* 0.6.92 — compact blue SVG table toolbar */
+.vhd-table-toolbar {
+    gap: 2px;
+    padding: 2px 3px;
+    border-radius: 5px;
+}
+
+.vhd-table-toolbar-button {
+    min-width: 25px;
+    width: 25px;
+    height: 25px;
+    padding: 2px;
+    background: #2563eb;
+    color: #fff;
+    border-radius: 4px;
+}
+
+.vhd-table-toolbar-button svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+    pointer-events: none;
+}
+
+.vhd-table-toolbar-button:hover,
+.vhd-table-toolbar-button:focus {
+    background: #1d4ed8;
+    color: #fff;
+}
+
+.vhd-table-toolbar-button:disabled {
+    background: #93c5fd;
+    color: rgba(255, 255, 255, .8);
+    opacity: .7;
+}
+
+.vhd-table-toolbar-separator {
+    height: 18px;
+    margin: 0 1px;
+}
+
+.vhd-table-toolbar-width {
+    gap: 3px;
+    margin: 0 1px;
+}
+
+.vhd-table-toolbar-width-input {
+    width: 48px;
+    height: 25px;
+    padding: 1px 3px;
+}
+
+
+/* 0.6.93 — top gutter below the contextual table toolbar */
+.vhd-table-editor {
+    padding-top: 8px;
+}
+
+/*
+ * The toolbar stays on the existing control line while the table content is
+ * moved slightly downward, creating a clear visual gap.
+ */
+.vhd-block-table.vhd-selected .vhd-table-toolbar,
+.vhd-block-table:focus-within .vhd-table-toolbar,
+.vhd-table-toolbar {
+    top: -34px;
+}
+
+
+/* 0.6.94 — final table editor spacing */
+.vhd-table-editor {
+    padding-top: 12px;
+}
+
+
+/* 0.6.99 — independent table-cell border sides */
+.vhd-property-caption {
+    margin-top: 7px;
+    margin-bottom: 3px;
+    font-size: .76rem;
+    font-weight: 600;
+}
+
+.vhd-table-border-sides {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px 8px;
+    margin-bottom: 4px;
+}
+
+.vhd-table-border-sides .vhd-property-field-checkbox {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+}
+
+.vhd-table-border-sides .vhd-property-field-checkbox input {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    flex: 0 0 auto;
 }

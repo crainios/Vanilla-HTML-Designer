@@ -21,6 +21,14 @@ function escapeCode(value = '') {
     ).replaceAll('\n', '&#10;');
 }
 
+function cleanTableCellContent(value = '') {
+    return String(value)
+        .replace(
+            /<button\b[^>]*class=(["'])[^"']*\bvhd-table-cell-menu-trigger\b[^"']*\1[^>]*>[\s\S]*?<\/button>/gi,
+            ''
+        );
+}
+
 function serializeBlock(block) {
     switch (block.type) {
         case 'heading': {
@@ -112,6 +120,154 @@ function serializeBlock(block) {
                 : '';
 
             return `<p class="vhd-button-wrap" style="text-align:${escapeAttribute(align)}"><a class="vhd-button" href="${escapeAttribute(block.url || '#')}"${targetAttributes} style="${style}">${escapeText(block.text || 'Button')}</a></p>`;
+        }
+
+        case 'table': {
+            const properties = block.properties ?? {};
+            const hasHeader = properties.header !== false;
+            const borderColor = properties.borderColor || '#d8dde5';
+            const borderWidth = Math.max(0, Number(properties.borderWidth ?? 1));
+            const cellPadding = Math.max(0, Number(properties.cellPadding ?? 8));
+            const headerBackground = properties.headerBackground || '#f3f4f6';
+
+            const columnCount = Math.max(
+                1,
+                block.rows?.[0]?.length ?? 1
+            );
+            let columnWidths = Array.isArray(properties.columnWidths)
+                ? properties.columnWidths
+                    .slice(0, columnCount)
+                    .map(value => Number(value))
+                : [];
+
+            if (
+                columnWidths.length !== columnCount
+                || columnWidths.some(value => !Number.isFinite(value) || value <= 0)
+            ) {
+                const base = 100 / columnCount;
+                columnWidths = Array.from(
+                    { length: columnCount },
+                    (_, index) => index === columnCount - 1
+                        ? 100 - (base * (columnCount - 1))
+                        : base
+                );
+            }
+
+            const widthTotal = columnWidths.reduce(
+                (sum, value) => sum + value,
+                0
+            );
+
+            if (widthTotal > 0 && Math.abs(widthTotal - 100) > 0.01) {
+                columnWidths = columnWidths.map(
+                    value => (value / widthTotal) * 100
+                );
+            }
+
+            const colgroup = `<colgroup>${columnWidths
+                .map(width => `<col style="width:${Number(width.toFixed(4))}%">`)
+                .join('')}</colgroup>`;
+
+            const rows = (block.rows ?? []).map((row, rowIndex) => {
+                const cells = (row ?? []).map(cell => {
+                    const cellProperties = cell?.properties ?? {};
+
+                    if (cellProperties.mergedInto) {
+                        return '';
+                    }
+
+                    const isHeader = hasHeader && rowIndex === 0;
+                    const tag = isHeader ? 'th' : 'td';
+                    const cellBackground =
+                        cellProperties.backgroundColor
+                        || (isHeader ? headerBackground : '');
+                    const cellBorderWidth = Math.max(
+                        0,
+                        Number(
+                            cellProperties.borderWidth
+                            ?? borderWidth
+                        )
+                    );
+                    const cellBorderStyle = [
+                        'solid',
+                        'dashed',
+                        'dotted',
+                        'none'
+                    ].includes(cellProperties.borderStyle)
+                        ? cellProperties.borderStyle
+                        : 'solid';
+                    const cellBorderColor =
+                        cellProperties.borderColor
+                        || borderColor;
+                    const cellSpecificPadding = Math.max(
+                        0,
+                        Number(
+                            cellProperties.padding
+                            ?? cellPadding
+                        )
+                    );
+                    const style = [
+                        `border-width:${cellBorderWidth}px`,
+                        `border-style:${escapeAttribute(cellBorderStyle)}`,
+                        `border-color:${escapeAttribute(cellBorderColor)}`,
+                        ...(cellProperties.borderTopEnabled === false
+                            ? ['border-top-style:hidden']
+                            : []),
+                        ...(cellProperties.borderRightEnabled === false
+                            ? ['border-right-style:hidden']
+                            : []),
+                        ...(cellProperties.borderBottomEnabled === false
+                            ? ['border-bottom-style:hidden']
+                            : []),
+                        ...(cellProperties.borderLeftEnabled === false
+                            ? ['border-left-style:hidden']
+                            : []),
+                        `padding:${cellSpecificPadding}px`,
+                        `text-align:${escapeAttribute(cellProperties.textAlign || 'left')}`,
+                        `vertical-align:${escapeAttribute(cellProperties.verticalAlign || 'top')}`,
+                        ...(cellProperties.color
+                            ? [`color:${escapeAttribute(cellProperties.color)}`]
+                            : []),
+                        ...(cellBackground
+                            ? [`background-color:${escapeAttribute(cellBackground)}`]
+                            : [])
+                    ].join(';');
+
+                    const scope = isHeader ? ' scope="col"' : '';
+                    const verticalAlign = [
+                        'top',
+                        'middle',
+                        'bottom'
+                    ].includes(cellProperties.verticalAlign)
+                        ? cellProperties.verticalAlign
+                        : 'top';
+                    const verticalClass =
+                        ` class="vhd-valign-${verticalAlign}"`;
+                    const rowSpan = Math.max(
+                        1,
+                        Number(cellProperties.rowspan ?? 1)
+                    );
+                    const colSpan = Math.max(
+                        1,
+                        Number(cellProperties.colspan ?? 1)
+                    );
+                    const spanAttributes = [
+                        ...(rowSpan > 1
+                            ? [` rowspan="${rowSpan}"`]
+                            : []),
+                        ...(colSpan > 1
+                            ? [` colspan="${colSpan}"`]
+                            : [])
+                    ].join('');
+                    const content = cleanTableCellContent(cell?.content ?? '');
+
+                    return `<${tag}${scope}${verticalClass}${spanAttributes} style="${style}">${content}</${tag}>`;
+                }).join('');
+
+                return `<tr>${cells}</tr>`;
+            }).join('');
+
+            return `<div class="vhd-table-wrap"><table class="vhd-table" style="table-layout:fixed">${colgroup}<tbody>${rows}</tbody></table></div>`;
         }
 
         case 'divider': {

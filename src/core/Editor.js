@@ -80,6 +80,11 @@ export default class Editor {
         this.rowDragScrollFrame = null;
         this.rowDragScrollDirection = 0;
         this.rowDragScrollSpeed = 0;
+        this.selectedTableCell = null;
+        this.tableSelection = null;
+        this.isFormattingTableSelection = false;
+        this.tableCellDrag = null;
+        this.tableColumnResize = null;
         this.fullscreenKeyHandler = event => {
             if (event.key === 'Escape' && this.isFullscreen) {
                 event.preventDefault();
@@ -99,6 +104,8 @@ export default class Editor {
             preview: () => this.#showPreview(),
             fullscreen: () => this.toggleFullscreen(),
             searchReplace: () => this.#showSearchReplaceDialog(),
+            formatSelection: (command, value) =>
+                this.#formatTableCellSelection(command, value),
             insertInlineImage: editable => this.#insertInlineImage(editable),
             insertVideo: editable => this.#insertVideo(editable),
             insertCode: editable => this.#showInsertCodeDialog(editable)
@@ -989,6 +996,12 @@ export default class Editor {
                         countText(this.#textFromHtml(block.content));
                     } else if (block.type === 'code') {
                         countText(block.code);
+                    } else if (block.type === 'table') {
+                        for (const tableRow of block.rows ?? []) {
+                            for (const cell of tableRow ?? []) {
+                                countText(this.#textFromHtml(cell?.content ?? ''));
+                            }
+                        }
                     }
                 }
             }
@@ -1130,8 +1143,21 @@ export default class Editor {
             }
         }
 
-        input.value = value;
-        input.addEventListener('input', () => onInput(input.value, input));
+        if (type === 'checkbox') {
+            field.classList.add('vhd-property-field-checkbox');
+            input.checked = Boolean(value);
+            input.addEventListener(
+                'change',
+                () => onInput(input.checked, input)
+            );
+        } else {
+            input.value = value;
+            input.addEventListener(
+                'input',
+                () => onInput(input.value, input)
+            );
+        }
+
         field.append(caption, input);
         return field;
     }
@@ -1399,6 +1425,257 @@ export default class Editor {
                     ]
                 )
             );
+        } else if (target.type === 'table') {
+            target.rows ??= [];
+            target.properties ??= {};
+            target.properties.header ??= true;
+            target.properties.borderColor ??= '#d8dde5';
+            target.properties.borderWidth ??= 1;
+            target.properties.cellPadding ??= 8;
+            target.properties.headerBackground ??= '#f3f4f6';
+
+            const rerenderTable = () => {
+                const preview = element.querySelector('.vhd-table-editor');
+
+                if (preview) {
+                    this.#renderTable(preview, target);
+                }
+            };
+
+            panel.append(
+                this.#propertyField(
+                    this.t.properties.tableHeader,
+                    'select',
+                    target.properties.header ? 'yes' : 'no',
+                    value => {
+                        target.properties.header = value === 'yes';
+                        rerenderTable();
+                    },
+                    [
+                        ['yes', this.t.properties.yes],
+                        ['no', this.t.properties.no]
+                    ]
+                ),
+                this.#propertyField(
+                    this.t.properties.tableBorderColor,
+                    'color',
+                    target.properties.borderColor,
+                    value => {
+                        target.properties.borderColor = value;
+                        rerenderTable();
+                    }
+                ),
+                this.#propertyField(
+                    this.t.properties.tableBorderWidth,
+                    'number',
+                    target.properties.borderWidth,
+                    value => {
+                        target.properties.borderWidth = Math.max(0, Number(value));
+                        rerenderTable();
+                    },
+                    { min: 0, max: 10, step: 1 }
+                ),
+                this.#propertyField(
+                    this.t.properties.tableCellPadding,
+                    'number',
+                    target.properties.cellPadding,
+                    value => {
+                        target.properties.cellPadding = Math.max(0, Number(value));
+                        rerenderTable();
+                    },
+                    { min: 0, max: 50, step: 1 }
+                ),
+                this.#propertyField(
+                    this.t.properties.tableHeaderBackground,
+                    'color',
+                    target.properties.headerBackground,
+                    value => {
+                        target.properties.headerBackground = value;
+                        rerenderTable();
+                    }
+                )
+            );
+
+            /*
+             * Cell borders are contextual: the current table selection is only
+             * an editor interaction. Each selected cell receives its own
+             * independent properties.
+             */
+            const selectedCells = this.#getSelectedTableCells(target);
+
+            if (selectedCells.length) {
+                const activeCell =
+                    target.rows?.[this.selectedTableCell?.rowIndex]
+                        ?.[this.selectedTableCell?.columnIndex]
+                    || selectedCells[0].cell;
+
+                activeCell.properties ??= {};
+
+                const preview = element.querySelector('.vhd-table-editor');
+
+                const cellLayoutTitle = document.createElement('div');
+                cellLayoutTitle.className = 'vhd-property-subtitle';
+                cellLayoutTitle.textContent =
+                    this.t.properties.tableCellLayout;
+
+                panel.append(
+                    cellLayoutTitle,
+                    this.#propertyField(
+                        this.t.properties.tableCellPaddingOverride,
+                        'number',
+                        activeCell.properties.padding
+                            ?? target.properties.cellPadding
+                            ?? 8,
+                        value => {
+                            if (preview) {
+                                this.#applyTableCellStyle(
+                                    preview,
+                                    target,
+                                    'padding',
+                                    Math.max(0, Number(value))
+                                );
+                            }
+                        },
+                        { min: 0, max: 50, step: 1 }
+                    ),
+                    this.#propertyField(
+                        this.t.properties.tableCellVerticalAlign,
+                        'select',
+                        activeCell.properties.verticalAlign || 'top',
+                        value => {
+                            if (preview) {
+                                this.#applyTableCellStyle(
+                                    preview,
+                                    target,
+                                    'verticalAlign',
+                                    value
+                                );
+                            }
+                        },
+                        [
+                            ['top', this.t.properties.tableVerticalTop],
+                            ['middle', this.t.properties.tableVerticalMiddle],
+                            ['bottom', this.t.properties.tableVerticalBottom]
+                        ]
+                    )
+                );
+
+                const cellBorderTitle = document.createElement('div');
+                cellBorderTitle.className = 'vhd-property-subtitle';
+                cellBorderTitle.textContent =
+                    this.t.properties.tableCellBorders;
+
+                panel.append(
+                    cellBorderTitle,
+                    this.#propertyField(
+                        this.t.properties.tableCellBorderWidth,
+                        'number',
+                        activeCell.properties.borderWidth
+                            ?? target.properties.borderWidth
+                            ?? 1,
+                        value => {
+                            if (preview) {
+                                this.#applyTableCellStyle(
+                                    preview,
+                                    target,
+                                    'borderWidth',
+                                    Math.max(0, Number(value))
+                                );
+                            }
+                        },
+                        { min: 0, max: 10, step: 1 }
+                    ),
+                    this.#propertyField(
+                        this.t.properties.tableCellBorderStyle,
+                        'select',
+                        activeCell.properties.borderStyle || 'solid',
+                        value => {
+                            if (preview) {
+                                this.#applyTableCellStyle(
+                                    preview,
+                                    target,
+                                    'borderStyle',
+                                    value
+                                );
+                            }
+                        },
+                        [
+                            ['solid', this.t.properties.borderSolid],
+                            ['dashed', this.t.properties.borderDashed],
+                            ['dotted', this.t.properties.borderDotted],
+                            ['none', this.t.properties.borderNone]
+                        ]
+                    ),
+                    this.#propertyField(
+                        this.t.properties.tableCellBorderColor,
+                        'color',
+                        activeCell.properties.borderColor
+                            || target.properties.borderColor
+                            || '#d8dde5',
+                        value => {
+                            if (preview) {
+                                this.#applyTableCellStyle(
+                                    preview,
+                                    target,
+                                    'borderColor',
+                                    value
+                                );
+                            }
+                        }
+                    )
+                );
+
+                const borderSidesTitle =
+                    document.createElement('div');
+                borderSidesTitle.className =
+                    'vhd-property-caption';
+                borderSidesTitle.textContent =
+                    this.t.properties.tableCellBorderSides;
+
+                const borderSides = document.createElement('div');
+                borderSides.className = 'vhd-table-border-sides';
+
+                const borderSideFields = [
+                    [
+                        this.t.properties.paddingTop,
+                        'borderTopEnabled'
+                    ],
+                    [
+                        this.t.properties.paddingRight,
+                        'borderRightEnabled'
+                    ],
+                    [
+                        this.t.properties.paddingBottom,
+                        'borderBottomEnabled'
+                    ],
+                    [
+                        this.t.properties.paddingLeft,
+                        'borderLeftEnabled'
+                    ]
+                ];
+
+                borderSideFields.forEach(([label, property]) => {
+                    borderSides.append(
+                        this.#propertyField(
+                            label,
+                            'checkbox',
+                            activeCell.properties[property] !== false,
+                            value => {
+                                if (preview) {
+                                    this.#applyTableCellStyle(
+                                        preview,
+                                        target,
+                                        property,
+                                        Boolean(value)
+                                    );
+                                }
+                            }
+                        )
+                    );
+                });
+
+                panel.append(borderSidesTitle, borderSides);
+            }
         } else if (target.type === 'divider') {
             target.properties ??= {
                 color: '#9ca3af',
@@ -2831,6 +3108,2689 @@ export default class Editor {
         });
     }
 
+    #setTableSelection(block, rowIndex, columnIndex, extend = false) {
+        if (
+            !extend
+            || !this.tableSelection
+            || this.tableSelection.block !== block
+        ) {
+            this.tableSelection = {
+                block,
+                anchorRow: rowIndex,
+                anchorColumn: columnIndex,
+                focusRow: rowIndex,
+                focusColumn: columnIndex
+            };
+        } else {
+            this.tableSelection.focusRow = rowIndex;
+            this.tableSelection.focusColumn = columnIndex;
+        }
+
+        this.selectedTableCell = {
+            block,
+            rowIndex,
+            columnIndex
+        };
+    }
+
+    #selectTableRange(preview, block, bounds) {
+        const rowCount = block.rows?.length ?? 0;
+        const columnCount = block.rows?.[0]?.length ?? 0;
+
+        if (!rowCount || !columnCount) {
+            return;
+        }
+
+        const minRow = Math.max(
+            0,
+            Math.min(rowCount - 1, Number(bounds.minRow))
+        );
+        const maxRow = Math.max(
+            minRow,
+            Math.min(rowCount - 1, Number(bounds.maxRow))
+        );
+        const minColumn = Math.max(
+            0,
+            Math.min(columnCount - 1, Number(bounds.minColumn))
+        );
+        const maxColumn = Math.max(
+            minColumn,
+            Math.min(columnCount - 1, Number(bounds.maxColumn))
+        );
+
+        this.tableSelection = {
+            block,
+            anchorRow: minRow,
+            anchorColumn: minColumn,
+            focusRow: maxRow,
+            focusColumn: maxColumn
+        };
+
+        this.selectedTableCell = {
+            block,
+            rowIndex: minRow,
+            columnIndex: minColumn
+        };
+
+        window.getSelection()?.removeAllRanges();
+        this.#refreshTableSelection(preview, block);
+        this.#selectProperties(
+            'block',
+            block,
+            preview.closest('.vhd-block')
+        );
+        this.#updateTableToolbar(preview, block);
+    }
+
+    #createTableSelectionLayer(preview, block, tableScroll, table) {
+        const rowCount = block.rows?.length ?? 0;
+        const columnCount = block.rows?.[0]?.length ?? 0;
+
+        if (!rowCount || !columnCount) {
+            return null;
+        }
+
+        const layer = document.createElement('div');
+        layer.className = 'vhd-table-selection-layer';
+
+        const corner = document.createElement('button');
+        corner.type = 'button';
+        corner.className =
+            'vhd-table-selection-handle vhd-table-all-selector';
+        corner.title = this.t.properties.tableSelectAll;
+        corner.setAttribute(
+            'aria-label',
+            this.t.properties.tableSelectAll
+        );
+
+        corner.addEventListener('pointerdown', event => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+
+        corner.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            this.#selectTableRange(preview, block, {
+                minRow: 0,
+                maxRow: rowCount - 1,
+                minColumn: 0,
+                maxColumn: columnCount - 1
+            });
+        });
+
+        layer.append(corner);
+
+        const columnSelectors = document.createElement('div');
+        columnSelectors.className =
+            'vhd-table-column-selectors';
+
+        for (
+            let columnIndex = 0;
+            columnIndex < columnCount;
+            columnIndex += 1
+        ) {
+            const selector = document.createElement('button');
+            selector.type = 'button';
+            selector.className =
+                'vhd-table-selection-handle vhd-table-column-selector';
+            selector.dataset.columnIndex = String(columnIndex);
+            selector.title = this.t.properties.tableSelectColumn;
+            selector.setAttribute(
+                'aria-label',
+                this.t.properties.tableSelectColumn
+            );
+
+            selector.addEventListener('pointerdown', event => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
+
+            selector.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                this.#selectTableRange(preview, block, {
+                    minRow: 0,
+                    maxRow: rowCount - 1,
+                    minColumn: columnIndex,
+                    maxColumn: columnIndex
+                });
+            });
+
+            columnSelectors.append(selector);
+        }
+
+        layer.append(columnSelectors);
+
+        const rowSelectors = document.createElement('div');
+        rowSelectors.className =
+            'vhd-table-row-selectors';
+
+        for (
+            let rowIndex = 0;
+            rowIndex < rowCount;
+            rowIndex += 1
+        ) {
+            const selector = document.createElement('button');
+            selector.type = 'button';
+            selector.className =
+                'vhd-table-selection-handle vhd-table-row-selector';
+            selector.dataset.rowIndex = String(rowIndex);
+            selector.title = this.t.properties.tableSelectRow;
+            selector.setAttribute(
+                'aria-label',
+                this.t.properties.tableSelectRow
+            );
+
+            selector.addEventListener('pointerdown', event => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
+
+            selector.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                this.#selectTableRange(preview, block, {
+                    minRow: rowIndex,
+                    maxRow: rowIndex,
+                    minColumn: 0,
+                    maxColumn: columnCount - 1
+                });
+            });
+
+            rowSelectors.append(selector);
+        }
+
+        layer.append(rowSelectors);
+
+        const updateGeometry = () => {
+            const tableWidth = table.offsetWidth;
+            const tableHeight = table.offsetHeight;
+
+            /*
+             * The selection layer is attached to the table preview rather
+             * than the horizontally scrolling wrapper. This allows its top
+             * and left selector margins to remain visible outside the table.
+             */
+            layer.style.width = `${tableWidth}px`;
+            layer.style.height = `${tableHeight}px`;
+            layer.style.left =
+                `${tableScroll.offsetLeft + table.offsetLeft - tableScroll.scrollLeft}px`;
+            layer.style.top =
+                `${tableScroll.offsetTop + table.offsetTop}px`;
+
+            const widths = this.#normalizeTableColumnWidths(block);
+            let cumulative = 0;
+
+            Array.from(columnSelectors.children)
+                .forEach((selector, index) => {
+                    const width = widths[index] ?? 0;
+                    selector.style.left = `${cumulative}%`;
+                    selector.style.width = `${width}%`;
+                    cumulative += width;
+                });
+
+            /*
+             * Use the native table.rows collection. VHD currently builds
+             * editor tables by appending <tr> elements directly to <table>,
+             * while imported/browser-parsed tables may contain a <tbody>.
+             * table.rows handles both structures reliably.
+             */
+            const rows = Array.from(table.rows ?? []);
+            const tableRect = table.getBoundingClientRect();
+
+            /*
+             * The row selector layer now lives outside the scrolling wrapper.
+             * Use viewport geometry relative to the rendered table itself
+             * rather than offsetTop/offsetHeight, whose offset parent can vary
+             * between browsers and table layout modes.
+             */
+            Array.from(rowSelectors.children)
+                .forEach((selector, index) => {
+                    const row = rows[index];
+
+                    if (!row) {
+                        selector.hidden = true;
+                        return;
+                    }
+
+                    const rowRect = row.getBoundingClientRect();
+
+                    selector.hidden = false;
+                    selector.style.top =
+                        `${rowRect.top - tableRect.top}px`;
+                    selector.style.height =
+                        `${Math.max(1, rowRect.height)}px`;
+                });
+
+        };
+
+        tableScroll.addEventListener(
+            'scroll',
+            updateGeometry,
+            { passive: true }
+        );
+
+        requestAnimationFrame(updateGeometry);
+
+        return layer;
+    }
+
+    #focusTableCell(block, rowIndex, columnIndex) {
+        requestAnimationFrame(() => {
+            const preview = this.canvas.querySelector(
+                `.vhd-table-editor[data-block-id="${CSS.escape(block.id)}"]`
+            );
+
+            if (!(preview instanceof HTMLElement)) {
+                return;
+            }
+
+            const cell = preview.querySelector(
+                `[data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`
+            );
+
+            if (!(cell instanceof HTMLElement)) {
+                return;
+            }
+
+            cell.focus();
+
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(cell);
+            range.collapse(true);
+            selection?.removeAllRanges();
+            selection?.addRange(range);
+
+            this.#refreshTableSelection(preview, block);
+            this.#updateTableToolbar(preview, block);
+        });
+    }
+
+    #getTableSelectionBounds(block) {
+        const selection = this.tableSelection;
+
+        if (!selection || selection.block !== block) {
+            const selected = this.selectedTableCell;
+
+            if (!selected || selected.block !== block) {
+                return null;
+            }
+
+            return {
+                minRow: selected.rowIndex,
+                maxRow: selected.rowIndex,
+                minColumn: selected.columnIndex,
+                maxColumn: selected.columnIndex
+            };
+        }
+
+        return {
+            minRow: Math.min(selection.anchorRow, selection.focusRow),
+            maxRow: Math.max(selection.anchorRow, selection.focusRow),
+            minColumn: Math.min(
+                selection.anchorColumn,
+                selection.focusColumn
+            ),
+            maxColumn: Math.max(
+                selection.anchorColumn,
+                selection.focusColumn
+            )
+        };
+    }
+
+    #getSelectedTableCells(block) {
+        const bounds = this.#getTableSelectionBounds(block);
+
+        if (!bounds) {
+            return [];
+        }
+
+        const cells = [];
+
+        for (
+            let rowIndex = bounds.minRow;
+            rowIndex <= bounds.maxRow;
+            rowIndex += 1
+        ) {
+            const row = block.rows?.[rowIndex];
+
+            if (!row) {
+                continue;
+            }
+
+            for (
+                let columnIndex = bounds.minColumn;
+                columnIndex <= bounds.maxColumn;
+                columnIndex += 1
+            ) {
+                const cell = row[columnIndex];
+
+                if (!cell) {
+                    continue;
+                }
+
+                cell.properties ??= {};
+
+                cells.push({
+                    cell,
+                    rowIndex,
+                    columnIndex
+                });
+            }
+        }
+
+        return cells;
+    }
+
+    #tableHasMergedCells(block) {
+        return (block.rows ?? []).some(row =>
+            (row ?? []).some(cell => {
+                const properties = cell?.properties ?? {};
+                return Boolean(
+                    properties.mergedInto
+                    || Number(properties.rowspan ?? 1) > 1
+                    || Number(properties.colspan ?? 1) > 1
+                );
+            })
+        );
+    }
+
+    #getTableMergeAnchor(block, rowIndex, columnIndex) {
+        const cell = block.rows?.[rowIndex]?.[columnIndex];
+
+        if (!cell) {
+            return null;
+        }
+
+        const properties = cell.properties ?? {};
+
+        if (properties.mergedInto) {
+            const anchorRow = Number(properties.mergedInto.row);
+            const anchorColumn = Number(properties.mergedInto.column);
+            const anchor = block.rows?.[anchorRow]?.[anchorColumn];
+
+            if (!anchor) {
+                return null;
+            }
+
+            return {
+                cell: anchor,
+                rowIndex: anchorRow,
+                columnIndex: anchorColumn
+            };
+        }
+
+        if (
+            Number(properties.rowspan ?? 1) > 1
+            || Number(properties.colspan ?? 1) > 1
+        ) {
+            return {
+                cell,
+                rowIndex,
+                columnIndex
+            };
+        }
+
+        return null;
+    }
+
+    #canMergeTableSelection(block) {
+        const bounds = this.#getTableSelectionBounds(block);
+
+        if (!bounds) {
+            return false;
+        }
+
+        const rowSpan = bounds.maxRow - bounds.minRow + 1;
+        const colSpan = bounds.maxColumn - bounds.minColumn + 1;
+
+        if (rowSpan <= 1 && colSpan <= 1) {
+            return false;
+        }
+
+        /*
+         * Keep header semantics predictable: a merge must not cross from the
+         * header row into body rows.
+         */
+        if (
+            block.properties?.header !== false
+            && bounds.minRow === 0
+            && bounds.maxRow > 0
+        ) {
+            return false;
+        }
+
+        for (
+            let rowIndex = bounds.minRow;
+            rowIndex <= bounds.maxRow;
+            rowIndex += 1
+        ) {
+            for (
+                let columnIndex = bounds.minColumn;
+                columnIndex <= bounds.maxColumn;
+                columnIndex += 1
+            ) {
+                const cell = block.rows?.[rowIndex]?.[columnIndex];
+                const properties = cell?.properties ?? {};
+
+                if (
+                    !cell
+                    || properties.mergedInto
+                    || Number(properties.rowspan ?? 1) > 1
+                    || Number(properties.colspan ?? 1) > 1
+                ) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    #mergeTableSelection(block) {
+        if (!this.#canMergeTableSelection(block)) {
+            return;
+        }
+
+        const bounds = this.#getTableSelectionBounds(block);
+
+        if (!bounds) {
+            return;
+        }
+
+        this.#remember();
+
+        const anchor =
+            block.rows[bounds.minRow][bounds.minColumn];
+
+        /*
+         * Keep every selected cell's content visible after the merge.
+         * Contents are collected in reading order (left-to-right,
+         * top-to-bottom) and separated by a line break.
+         *
+         * The original content of every logical cell is preserved so an
+         * unmerge can restore the initial grid without data loss.
+         */
+        const mergedContents = [];
+
+        for (
+            let rowIndex = bounds.minRow;
+            rowIndex <= bounds.maxRow;
+            rowIndex += 1
+        ) {
+            for (
+                let columnIndex = bounds.minColumn;
+                columnIndex <= bounds.maxColumn;
+                columnIndex += 1
+            ) {
+                const cell = block.rows[rowIndex][columnIndex];
+                const content = String(cell?.content ?? '').trim();
+
+                if (content) {
+                    mergedContents.push(content);
+                }
+            }
+        }
+
+        anchor.properties ??= {};
+        anchor.properties.mergeOriginalContent =
+            String(anchor.content ?? '');
+        anchor.properties.rowspan =
+            bounds.maxRow - bounds.minRow + 1;
+        anchor.properties.colspan =
+            bounds.maxColumn - bounds.minColumn + 1;
+        anchor.content = mergedContents.join('<br>');
+
+        for (
+            let rowIndex = bounds.minRow;
+            rowIndex <= bounds.maxRow;
+            rowIndex += 1
+        ) {
+            for (
+                let columnIndex = bounds.minColumn;
+                columnIndex <= bounds.maxColumn;
+                columnIndex += 1
+            ) {
+                if (
+                    rowIndex === bounds.minRow
+                    && columnIndex === bounds.minColumn
+                ) {
+                    continue;
+                }
+
+                const cell = block.rows[rowIndex][columnIndex];
+                cell.properties ??= {};
+                delete cell.properties.rowspan;
+                delete cell.properties.colspan;
+                cell.properties.mergedInto = {
+                    row: bounds.minRow,
+                    column: bounds.minColumn
+                };
+            }
+        }
+
+        this.tableSelection = {
+            block,
+            anchorRow: bounds.minRow,
+            anchorColumn: bounds.minColumn,
+            focusRow: bounds.minRow,
+            focusColumn: bounds.minColumn
+        };
+        this.selectedTableCell = {
+            block,
+            rowIndex: bounds.minRow,
+            columnIndex: bounds.minColumn
+        };
+
+        this.render();
+    }
+
+    #unmergeTableCell(block) {
+        const selected = this.selectedTableCell;
+
+        if (!selected || selected.block !== block) {
+            return;
+        }
+
+        const merge = this.#getTableMergeAnchor(
+            block,
+            selected.rowIndex,
+            selected.columnIndex
+        );
+
+        if (!merge) {
+            return;
+        }
+
+        const anchor = merge.cell;
+        const properties = anchor.properties ?? {};
+        const rowSpan = Math.max(
+            1,
+            Number(properties.rowspan ?? 1)
+        );
+        const colSpan = Math.max(
+            1,
+            Number(properties.colspan ?? 1)
+        );
+
+        this.#remember();
+
+        const originalAnchorContent =
+            properties.mergeOriginalContent;
+        const originalAnchorProperties =
+            properties.mergeOriginalProperties;
+
+        delete properties.rowspan;
+        delete properties.colspan;
+        delete properties.mergeOriginalContent;
+        delete properties.mergeOriginalProperties;
+
+        if (originalAnchorContent !== undefined) {
+            anchor.content = originalAnchorContent;
+        }
+
+        if (
+            originalAnchorProperties
+            && typeof originalAnchorProperties === 'object'
+        ) {
+            anchor.properties = {
+                ...originalAnchorProperties
+            };
+        }
+
+        for (
+            let rowIndex = merge.rowIndex;
+            rowIndex < merge.rowIndex + rowSpan;
+            rowIndex += 1
+        ) {
+            for (
+                let columnIndex = merge.columnIndex;
+                columnIndex < merge.columnIndex + colSpan;
+                columnIndex += 1
+            ) {
+                const cell = block.rows?.[rowIndex]?.[columnIndex];
+
+                if (!cell?.properties?.mergedInto) {
+                    continue;
+                }
+
+                const mergedInto = cell.properties.mergedInto;
+
+                if (
+                    Number(mergedInto.row) === merge.rowIndex
+                    && Number(mergedInto.column) === merge.columnIndex
+                ) {
+                    delete cell.properties.mergedInto;
+                }
+            }
+        }
+
+        this.tableSelection = {
+            block,
+            anchorRow: merge.rowIndex,
+            anchorColumn: merge.columnIndex,
+            focusRow: merge.rowIndex,
+            focusColumn: merge.columnIndex
+        };
+        this.selectedTableCell = {
+            block,
+            rowIndex: merge.rowIndex,
+            columnIndex: merge.columnIndex
+        };
+
+        this.render();
+    }
+
+    #formatTableCellSelection(command, value = null) {
+        const selection = this.tableSelection;
+        const block = selection?.block;
+
+        if (!block) {
+            return false;
+        }
+
+        const selectedCells = this.#getSelectedTableCells(block);
+
+        const preview = this.canvas.querySelector(
+            `.vhd-table-editor[data-block-id="${CSS.escape(block.id)}"]`
+        );
+
+        if (!(preview instanceof HTMLElement)) {
+            return false;
+        }
+
+        /*
+         * Horizontal alignment is a property of the table cell itself, not
+         * merely of its editable inner HTML. Handle it through the persisted
+         * cell model even when only one cell is selected.
+         *
+         * This also keeps single-cell and multi-cell alignment behavior
+         * identical in JSON, Preview and exported HTML.
+         */
+        if (command === 'alignment' && selectedCells.length >= 1) {
+            this.#applyTableCellStyle(
+                preview,
+                block,
+                'textAlign',
+                value
+            );
+            return true;
+        }
+
+        /*
+         * Other rich-text commands keep their native single-cell behavior.
+         * The special multi-cell path is only needed for an actual range.
+         */
+        if (selectedCells.length <= 1) {
+            return false;
+        }
+
+        if (command === 'foreColor') {
+            this.#applyTableCellStyle(
+                preview,
+                block,
+                'color',
+                value
+            );
+            return true;
+        }
+
+        if (command === 'hiliteColor') {
+            this.#applyTableCellStyle(
+                preview,
+                block,
+                'backgroundColor',
+                value
+            );
+            return true;
+        }
+
+        const supportedInlineCommands = new Set([
+            'bold',
+            'italic',
+            'underline',
+            'strikeThrough',
+            'superscript',
+            'subscript',
+            'fontName',
+            'fontSizePt'
+        ]);
+
+        if (!supportedInlineCommands.has(command)) {
+            return false;
+        }
+
+        this.#remember();
+
+        const browserSelection = window.getSelection();
+        const savedRanges = browserSelection
+            ? Array.from(
+                { length: browserSelection.rangeCount },
+                (_, index) => browserSelection.getRangeAt(index).cloneRange()
+            )
+            : [];
+
+        /*
+         * Preserve the editor-level table selection while execCommand moves
+         * the native DOM selection through each individual cell.
+         */
+        const logicalSelection = this.tableSelection
+            ? { ...this.tableSelection }
+            : null;
+        const logicalSelectedCell = this.selectedTableCell
+            ? { ...this.selectedTableCell }
+            : null;
+
+        this.isFormattingTableSelection = true;
+
+        try {
+            for (const { cell, rowIndex, columnIndex } of selectedCells) {
+                const cellElement = preview.querySelector(
+                    `[data-row-index="${rowIndex}"][data-column-index="${columnIndex}"]`
+                );
+
+                if (!(cellElement instanceof HTMLElement)) {
+                    continue;
+                }
+
+                const range = document.createRange();
+                range.selectNodeContents(cellElement);
+
+                browserSelection?.removeAllRanges();
+                browserSelection?.addRange(range);
+
+                document.execCommand('styleWithCSS', false, true);
+
+                if (command === 'fontSizePt') {
+                    document.execCommand('fontSize', false, '7');
+
+                    cellElement
+                        .querySelectorAll('font[size="7"]')
+                        .forEach(element => {
+                            const span = document.createElement('span');
+                            span.style.fontSize = `${value}pt`;
+
+                            while (element.firstChild) {
+                                span.append(element.firstChild);
+                            }
+
+                            element.replaceWith(span);
+                        });
+                } else {
+                    document.execCommand(command, false, value);
+                }
+
+                cell.content = cellElement.innerHTML;
+            }
+        } finally {
+            this.isFormattingTableSelection = false;
+
+            /*
+             * Restore VHD's logical selection explicitly. This is independent
+             * from the browser text selection and remains active for the next
+             * formatting command.
+             */
+            this.tableSelection = logicalSelection;
+            this.selectedTableCell = logicalSelectedCell;
+
+            browserSelection?.removeAllRanges();
+
+            for (const range of savedRanges) {
+                try {
+                    browserSelection?.addRange(range);
+                } catch {
+                    // The previous range can be invalid after DOM formatting.
+                }
+            }
+        }
+
+        this.#updateDocumentStatistics();
+        this.#refreshTableSelection(preview, block);
+        this.#updateTableToolbar(preview, block);
+
+        return true;
+    }
+
+    #applyTableCellStyle(preview, block, property, value) {
+        const selectedCells = this.#getSelectedTableCells(block);
+
+        if (!selectedCells.length) {
+            return;
+        }
+
+        this.#remember();
+
+        const logicalSelection = this.tableSelection
+            ? { ...this.tableSelection }
+            : null;
+        const logicalSelectedCell = this.selectedTableCell
+            ? { ...this.selectedTableCell }
+            : null;
+
+        for (const { cell } of selectedCells) {
+            cell.properties ??= {};
+            cell.properties[property] = value;
+        }
+
+        this.tableSelection = logicalSelection;
+        this.selectedTableCell = logicalSelectedCell;
+
+        const bounds = this.#getTableSelectionBounds(block);
+
+        if (!bounds) {
+            return;
+        }
+
+        preview.querySelectorAll('th, td').forEach(cellElement => {
+            const rowIndex = Number(cellElement.dataset.rowIndex);
+            const columnIndex = Number(cellElement.dataset.columnIndex);
+
+            if (
+                rowIndex < bounds.minRow
+                || rowIndex > bounds.maxRow
+                || columnIndex < bounds.minColumn
+                || columnIndex > bounds.maxColumn
+            ) {
+                return;
+            }
+
+            const logicalCell =
+                block.rows?.[rowIndex]?.[columnIndex];
+            const logicalProperties =
+                logicalCell?.properties ?? {};
+
+            if (property === 'textAlign') {
+                cellElement.style.textAlign = value;
+            } else if (property === 'verticalAlign') {
+                cellElement.style.verticalAlign = value;
+            } else if (property === 'color') {
+                cellElement.style.color = value;
+            } else if (property === 'backgroundColor') {
+                cellElement.style.backgroundColor = value;
+            } else if (property === 'borderWidth') {
+                cellElement.style.borderWidth = `${value}px`;
+            } else if (property === 'borderStyle') {
+                cellElement.style.borderStyle = value;
+            } else if (property === 'borderColor') {
+                cellElement.style.borderColor = value;
+            } else if (property === 'padding') {
+                cellElement.style.padding = `${value}px`;
+            } else if (property === 'borderTopEnabled') {
+                cellElement.style.borderTopStyle = value
+                    ? logicalProperties.borderStyle
+                        || block.properties?.borderStyle
+                        || 'solid'
+                    : 'hidden';
+            } else if (property === 'borderRightEnabled') {
+                cellElement.style.borderRightStyle = value
+                    ? logicalProperties.borderStyle
+                        || block.properties?.borderStyle
+                        || 'solid'
+                    : 'hidden';
+            } else if (property === 'borderBottomEnabled') {
+                cellElement.style.borderBottomStyle = value
+                    ? logicalProperties.borderStyle
+                        || block.properties?.borderStyle
+                        || 'solid'
+                    : 'hidden';
+            } else if (property === 'borderLeftEnabled') {
+                cellElement.style.borderLeftStyle = value
+                    ? logicalProperties.borderStyle
+                        || block.properties?.borderStyle
+                        || 'solid'
+                    : 'hidden';
+            }
+
+            /*
+             * A common border style change must not reactivate sides that
+             * were explicitly disabled on this cell.
+             */
+            if (
+                property === 'borderStyle'
+                || property === 'borderWidth'
+                || property === 'borderColor'
+            ) {
+                if (logicalProperties.borderTopEnabled === false) {
+                    cellElement.style.borderTopStyle = 'hidden';
+                }
+                if (logicalProperties.borderRightEnabled === false) {
+                    cellElement.style.borderRightStyle = 'hidden';
+                }
+                if (logicalProperties.borderBottomEnabled === false) {
+                    cellElement.style.borderBottomStyle = 'hidden';
+                }
+                if (logicalProperties.borderLeftEnabled === false) {
+                    cellElement.style.borderLeftStyle = 'hidden';
+                }
+            }
+        });
+    }
+
+    #clearSelectedTableCellContents(preview, block) {
+        const selectedCells = this.#getSelectedTableCells(block);
+
+        /*
+         * A single focused contenteditable cell keeps normal text-editor
+         * Delete semantics. This command is specifically for a logical
+         * multi-cell selection.
+         */
+        if (selectedCells.length <= 1) {
+            return false;
+        }
+
+        this.#remember();
+
+        for (const { cell } of selectedCells) {
+            cell.content = '';
+
+            /*
+             * A merged anchor stores its pre-merge content separately so that
+             * unmerge can restore it. Clearing the selected anchor must clear
+             * that restoration value too, otherwise old text would reappear.
+             */
+            if (
+                cell.properties
+                && cell.properties.mergeOriginalContent !== undefined
+            ) {
+                cell.properties.mergeOriginalContent = '';
+            }
+        }
+
+        const bounds = this.#getTableSelectionBounds(block);
+
+        if (bounds) {
+            preview.querySelectorAll('th, td').forEach(cellElement => {
+                const rowIndex =
+                    Number(cellElement.dataset.rowIndex);
+                const columnIndex =
+                    Number(cellElement.dataset.columnIndex);
+
+                if (
+                    rowIndex < bounds.minRow
+                    || rowIndex > bounds.maxRow
+                    || columnIndex < bounds.minColumn
+                    || columnIndex > bounds.maxColumn
+                ) {
+                    return;
+                }
+
+                const cell =
+                    block.rows?.[rowIndex]?.[columnIndex];
+
+                if (!cell?.properties?.mergedInto) {
+                    cellElement.innerHTML = '';
+                }
+            });
+        }
+
+        this.#updateDocumentStatistics();
+        this.#refreshTableSelection(preview, block);
+        this.#updateTableToolbar(preview, block);
+
+        return true;
+    }
+
+    #refreshTableSelection(preview, block) {
+        const bounds = this.#getTableSelectionBounds(block);
+
+        preview.querySelectorAll('.vhd-table-cell-selected')
+            .forEach(item => item.classList.remove('vhd-table-cell-selected'));
+
+        if (!bounds) {
+            return;
+        }
+
+        preview.querySelectorAll('th, td').forEach(cellElement => {
+            const rowIndex = Number(cellElement.dataset.rowIndex);
+            const columnIndex = Number(cellElement.dataset.columnIndex);
+
+            if (
+                rowIndex >= bounds.minRow
+                && rowIndex <= bounds.maxRow
+                && columnIndex >= bounds.minColumn
+                && columnIndex <= bounds.maxColumn
+            ) {
+                cellElement.classList.add('vhd-table-cell-selected');
+            }
+        });
+    }
+
+    #getTableLogicalCellFromPoint(preview, block, clientX, clientY) {
+        const table = preview.querySelector('table');
+
+        if (!(table instanceof HTMLTableElement)) {
+            return null;
+        }
+
+        const rowCount = block.rows?.length ?? 0;
+        const columnCount = block.rows?.[0]?.length ?? 0;
+
+        if (!rowCount || !columnCount) {
+            return null;
+        }
+
+        const tableRect = table.getBoundingClientRect();
+
+        if (
+            clientX < tableRect.left
+            || clientX > tableRect.right
+            || clientY < tableRect.top
+            || clientY > tableRect.bottom
+        ) {
+            return null;
+        }
+
+        /*
+         * Resolve the logical row from the rendered <tr> geometry instead of
+         * the DOM cell under the pointer. A rowspan can visually cover several
+         * logical rows while only exposing the merge anchor as a DOM cell.
+         */
+        const renderedRows = Array.from(table.rows ?? []);
+        let rowIndex = renderedRows.findIndex(row => {
+            const rect = row.getBoundingClientRect();
+
+            return clientY >= rect.top && clientY <= rect.bottom;
+        });
+
+        if (rowIndex < 0) {
+            /*
+             * Border rounding can leave a sub-pixel gap between adjacent row
+             * rectangles. Fall back to the nearest rendered row.
+             */
+            let nearestDistance = Number.POSITIVE_INFINITY;
+
+            renderedRows.forEach((row, index) => {
+                const rect = row.getBoundingClientRect();
+                const center = rect.top + rect.height / 2;
+                const distance = Math.abs(clientY - center);
+
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    rowIndex = index;
+                }
+            });
+        }
+
+        rowIndex = Math.max(
+            0,
+            Math.min(rowCount - 1, rowIndex)
+        );
+
+        /*
+         * Resolve the logical column from VHD's percentage column widths.
+         * This is independent from colspan and therefore still identifies
+         * every logical column inside a visually merged cell.
+         */
+        const widths = this.#normalizeTableColumnWidths(block);
+        const relativeX = Math.max(
+            0,
+            Math.min(
+                tableRect.width,
+                clientX - tableRect.left
+            )
+        );
+        const percentX = tableRect.width > 0
+            ? relativeX / tableRect.width * 100
+            : 0;
+
+        let cumulative = 0;
+        let columnIndex = columnCount - 1;
+
+        for (
+            let index = 0;
+            index < columnCount;
+            index += 1
+        ) {
+            cumulative += widths[index] ?? 0;
+
+            if (percentX <= cumulative || index === columnCount - 1) {
+                columnIndex = index;
+                break;
+            }
+        }
+
+        return {
+            rowIndex,
+            columnIndex
+        };
+    }
+
+    #beginTableCellDrag(preview, block, rowIndex, columnIndex, event) {
+        if (event.button !== 0 || event.shiftKey) {
+            return;
+        }
+
+        this.tableCellDrag = {
+            preview,
+            block,
+            anchorRow: rowIndex,
+            anchorColumn: columnIndex,
+            startX: event.clientX,
+            startY: event.clientY,
+            pointerId: event.pointerId,
+            dragging: false
+        };
+
+        const onMove = moveEvent => {
+            const drag = this.tableCellDrag;
+
+            if (
+                !drag
+                || drag.pointerId !== moveEvent.pointerId
+            ) {
+                return;
+            }
+
+            const distance = Math.hypot(
+                moveEvent.clientX - drag.startX,
+                moveEvent.clientY - drag.startY
+            );
+
+            if (!drag.dragging && distance < 6) {
+                return;
+            }
+
+            const logicalTarget =
+                this.#getTableLogicalCellFromPoint(
+                    preview,
+                    block,
+                    moveEvent.clientX,
+                    moveEvent.clientY
+                );
+
+            if (!logicalTarget) {
+                return;
+            }
+
+            const crossedCellBoundary =
+                logicalTarget.rowIndex !== drag.anchorRow
+                || logicalTarget.columnIndex !== drag.anchorColumn;
+
+            /*
+             * Remaining inside the starting cell is interpreted as native
+             * text selection. Do not prevent the browser gesture and do not
+             * clear its Selection.
+             */
+            if (!drag.dragging && !crossedCellBoundary) {
+                return;
+            }
+
+            if (!drag.dragging) {
+                drag.dragging = true;
+                preview.classList.add('vhd-table-selecting-cells');
+
+                /*
+                 * The pointer has crossed a logical cell boundary: from this
+                 * point the gesture becomes rectangular cell selection.
+                 * Clear any native text range that may have been started in
+                 * the anchor cell.
+                 */
+                window.getSelection()?.removeAllRanges();
+
+                this.#setTableSelection(
+                    block,
+                    drag.anchorRow,
+                    drag.anchorColumn,
+                    false
+                );
+            }
+
+            moveEvent.preventDefault();
+
+            this.#setTableSelection(
+                block,
+                logicalTarget.rowIndex,
+                logicalTarget.columnIndex,
+                true
+            );
+
+            this.#refreshTableSelection(preview, block);
+            this.#updateTableToolbar(preview, block);
+        };
+
+        const onEnd = endEvent => {
+            const drag = this.tableCellDrag;
+
+            if (
+                !drag
+                || drag.pointerId !== endEvent.pointerId
+            ) {
+                return;
+            }
+
+            document.removeEventListener('pointermove', onMove, true);
+            document.removeEventListener('pointerup', onEnd, true);
+            document.removeEventListener('pointercancel', onEnd, true);
+
+            preview.classList.remove('vhd-table-selecting-cells');
+
+            if (drag.dragging) {
+                endEvent.preventDefault();
+                window.getSelection()?.removeAllRanges();
+
+                this.#refreshTableSelection(preview, block);
+                this.#updateTableToolbar(preview, block);
+            }
+
+            this.tableCellDrag = null;
+        };
+
+        document.addEventListener('pointermove', onMove, true);
+        document.addEventListener('pointerup', onEnd, true);
+        document.addEventListener('pointercancel', onEnd, true);
+    }
+
+    #createTableResizeLayer(preview, block, tableScroll, table) {
+        const widths = this.#normalizeTableColumnWidths(block);
+
+        if (widths.length <= 1) {
+            return null;
+        }
+
+        const layer = document.createElement('div');
+        layer.className = 'vhd-table-resize-layer';
+        layer.setAttribute('aria-hidden', 'true');
+
+        const updateLayerGeometry = () => {
+            const width = Math.max(
+                table.offsetWidth,
+                tableScroll.clientWidth
+            );
+
+            layer.style.width = `${width}px`;
+            layer.style.height = `${table.offsetHeight}px`;
+        };
+
+        const applyWidths = () => {
+            const current = this.#normalizeTableColumnWidths(block);
+            const cols = Array.from(
+                table.querySelectorAll(':scope > colgroup > col')
+            );
+
+            current.forEach((width, index) => {
+                if (cols[index]) {
+                    cols[index].style.width = `${width}%`;
+                }
+            });
+
+            let cumulative = 0;
+
+            layer.querySelectorAll('.vhd-table-column-resize-handle')
+                .forEach((handle, index) => {
+                    cumulative += current[index] ?? 0;
+                    handle.style.left = `${cumulative}%`;
+                });
+
+            this.#applyTableColumnWidths(preview, block);
+        };
+
+        for (let index = 0; index < widths.length - 1; index += 1) {
+            const handle = document.createElement('span');
+            handle.className = 'vhd-table-column-resize-handle';
+            handle.dataset.columnIndex = String(index);
+            handle.title = this.t.properties.tableResizeColumn;
+
+            const cumulative = widths
+                .slice(0, index + 1)
+                .reduce((sum, value) => sum + value, 0);
+
+            handle.style.left = `${cumulative}%`;
+
+            handle.addEventListener('pointerdown', event => {
+                if (event.button !== 0) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+
+                const current = this.#normalizeTableColumnWidths(block);
+                const leftWidth = current[index];
+                const rightWidth = current[index + 1];
+                const pairTotal = leftWidth + rightWidth;
+                const tableWidth = table.getBoundingClientRect().width || 1;
+
+                this.#remember();
+
+                this.tableColumnResize = {
+                    block,
+                    preview,
+                    index,
+                    pointerId: event.pointerId,
+                    startX: event.clientX,
+                    leftWidth,
+                    rightWidth,
+                    pairTotal,
+                    tableWidth
+                };
+
+                preview.classList.add('vhd-table-resizing-column');
+                handle.classList.add('is-resizing');
+                handle.setPointerCapture?.(event.pointerId);
+
+                const onMove = moveEvent => {
+                    const resize = this.tableColumnResize;
+
+                    if (
+                        !resize
+                        || resize.pointerId !== moveEvent.pointerId
+                    ) {
+                        return;
+                    }
+
+                    moveEvent.preventDefault();
+
+                    const deltaPercent =
+                        (
+                            moveEvent.clientX - resize.startX
+                        )
+                        / resize.tableWidth
+                        * 100;
+
+                    const minWidth = 5;
+                    const nextLeft = Math.min(
+                        resize.pairTotal - minWidth,
+                        Math.max(
+                            minWidth,
+                            resize.leftWidth + deltaPercent
+                        )
+                    );
+                    const nextRight = resize.pairTotal - nextLeft;
+
+                    const next = this.#normalizeTableColumnWidths(block)
+                        .slice();
+
+                    next[index] = nextLeft;
+                    next[index + 1] = nextRight;
+                    block.properties.columnWidths = next;
+
+                    applyWidths();
+                };
+
+                const onEnd = endEvent => {
+                    const resize = this.tableColumnResize;
+
+                    if (
+                        !resize
+                        || resize.pointerId !== endEvent.pointerId
+                    ) {
+                        return;
+                    }
+
+                    handle.releasePointerCapture?.(endEvent.pointerId);
+                    handle.removeEventListener('pointermove', onMove);
+                    handle.removeEventListener('pointerup', onEnd);
+                    handle.removeEventListener('pointercancel', onEnd);
+
+                    preview.classList.remove('vhd-table-resizing-column');
+                    handle.classList.remove('is-resizing');
+                    this.tableColumnResize = null;
+
+                    applyWidths();
+                };
+
+                handle.addEventListener('pointermove', onMove);
+                handle.addEventListener('pointerup', onEnd);
+                handle.addEventListener('pointercancel', onEnd);
+            });
+
+            layer.append(handle);
+        }
+
+        requestAnimationFrame(() => {
+            updateLayerGeometry();
+            applyWidths();
+        });
+
+        tableScroll.addEventListener('scroll', updateLayerGeometry, {
+            passive: true
+        });
+
+        return layer;
+    }
+
+    #normalizeTableColumnWidths(block) {
+        const columnCount = Math.max(
+            1,
+            block.rows?.[0]?.length ?? 1
+        );
+
+        block.properties ??= {};
+        let widths = Array.isArray(block.properties.columnWidths)
+            ? block.properties.columnWidths
+                .slice(0, columnCount)
+                .map(value => Number(value))
+            : [];
+
+        if (
+            widths.length !== columnCount
+            || widths.some(value => !Number.isFinite(value) || value <= 0)
+        ) {
+            const base = 100 / columnCount;
+            widths = Array.from(
+                { length: columnCount },
+                (_, index) => index === columnCount - 1
+                    ? 100 - (base * (columnCount - 1))
+                    : base
+            );
+        }
+
+        const total = widths.reduce((sum, value) => sum + value, 0);
+
+        if (!Number.isFinite(total) || total <= 0) {
+            const base = 100 / columnCount;
+            widths = Array.from(
+                { length: columnCount },
+                (_, index) => index === columnCount - 1
+                    ? 100 - (base * (columnCount - 1))
+                    : base
+            );
+        } else if (Math.abs(total - 100) > 0.01) {
+            widths = widths.map(value => (value / total) * 100);
+        }
+
+        block.properties.columnWidths = widths;
+        return widths;
+    }
+
+    #setTableColumnWidth(block, columnIndex, requestedWidth) {
+        const widths = this.#normalizeTableColumnWidths(block);
+        const columnCount = widths.length;
+
+        if (columnCount === 1) {
+            block.properties.columnWidths = [100];
+            return;
+        }
+
+        const maxWidth = 95;
+        const minWidth = 5;
+        const width = Math.min(
+            maxWidth,
+            Math.max(minWidth, Number(requestedWidth) || minWidth)
+        );
+        const remaining = 100 - width;
+        const otherIndexes = widths
+            .map((_, index) => index)
+            .filter(index => index !== columnIndex);
+
+        const currentOtherTotal = otherIndexes.reduce(
+            (sum, index) => sum + widths[index],
+            0
+        );
+
+        const next = widths.slice();
+        next[columnIndex] = width;
+
+        if (currentOtherTotal > 0) {
+            for (const index of otherIndexes) {
+                next[index] =
+                    remaining * (widths[index] / currentOtherTotal);
+            }
+        } else {
+            const equal = remaining / otherIndexes.length;
+            for (const index of otherIndexes) {
+                next[index] = equal;
+            }
+        }
+
+        block.properties.columnWidths = next;
+    }
+
+    #resetTableColumnWidths(block) {
+        const columnCount = Math.max(
+            1,
+            block.rows?.[0]?.length ?? 1
+        );
+        const base = 100 / columnCount;
+
+        block.properties ??= {};
+        block.properties.columnWidths = Array.from(
+            { length: columnCount },
+            (_, index) => index === columnCount - 1
+                ? 100 - (base * (columnCount - 1))
+                : base
+        );
+    }
+
+    #getTableMergeDescriptors(block) {
+        const merges = [];
+
+        (block.rows ?? []).forEach((row, rowIndex) => {
+            (row ?? []).forEach((cell, columnIndex) => {
+                const properties = cell?.properties ?? {};
+                const rowspan = Math.max(
+                    1,
+                    Number(properties.rowspan ?? 1)
+                );
+                const colspan = Math.max(
+                    1,
+                    Number(properties.colspan ?? 1)
+                );
+
+                if (rowspan <= 1 && colspan <= 1) {
+                    return;
+                }
+
+                merges.push({
+                    row: rowIndex,
+                    column: columnIndex,
+                    rowspan,
+                    colspan,
+                    content: String(cell.content ?? ''),
+                    properties: { ...properties }
+                });
+            });
+        });
+
+        return merges;
+    }
+
+    #clearTableMergeMetadata(block) {
+        for (const row of block.rows ?? []) {
+            for (const cell of row ?? []) {
+                if (!cell) {
+                    continue;
+                }
+
+                cell.properties ??= {};
+                delete cell.properties.rowspan;
+                delete cell.properties.colspan;
+                delete cell.properties.mergedInto;
+            }
+        }
+    }
+
+    #applyTableMergeDescriptor(block, merge) {
+        const anchor =
+            block.rows?.[merge.row]?.[merge.column];
+
+        if (!anchor) {
+            return;
+        }
+
+        const rowspan = Math.max(1, Number(merge.rowspan));
+        const colspan = Math.max(1, Number(merge.colspan));
+
+        if (rowspan <= 1 && colspan <= 1) {
+            return;
+        }
+
+        /*
+         * If deletion moved the merge anchor, keep the currently visible
+         * merged content while preserving the new anchor's underlying content
+         * for a later unmerge.
+         */
+        if (merge.anchorMoved) {
+            const originalContent = String(anchor.content ?? '');
+            const originalProperties = { ...(anchor.properties ?? {}) };
+
+            anchor.content = merge.content;
+            anchor.properties = {
+                ...originalProperties,
+                ...merge.properties,
+                mergeOriginalContent: originalContent,
+                mergeOriginalProperties: originalProperties
+            };
+        } else {
+            anchor.content = merge.content;
+            anchor.properties = {
+                ...(anchor.properties ?? {}),
+                ...merge.properties
+            };
+        }
+
+        delete anchor.properties.mergedInto;
+        anchor.properties.rowspan = rowspan;
+        anchor.properties.colspan = colspan;
+
+        for (
+            let rowIndex = merge.row;
+            rowIndex < merge.row + rowspan;
+            rowIndex += 1
+        ) {
+            for (
+                let columnIndex = merge.column;
+                columnIndex < merge.column + colspan;
+                columnIndex += 1
+            ) {
+                if (
+                    rowIndex === merge.row
+                    && columnIndex === merge.column
+                ) {
+                    continue;
+                }
+
+                const cell =
+                    block.rows?.[rowIndex]?.[columnIndex];
+
+                if (!cell) {
+                    continue;
+                }
+
+                cell.properties ??= {};
+                delete cell.properties.rowspan;
+                delete cell.properties.colspan;
+                cell.properties.mergedInto = {
+                    row: merge.row,
+                    column: merge.column
+                };
+            }
+        }
+    }
+
+    #cloneTableRowFormatting(block, sourceRowIndex) {
+        const sourceRow = block.rows?.[sourceRowIndex];
+
+        if (!sourceRow) {
+            const columnCount = Math.max(
+                1,
+                block.rows?.[0]?.length ?? 1
+            );
+
+            return Array.from(
+                { length: columnCount },
+                () => ({ content: '', properties: {} })
+            );
+        }
+
+        return sourceRow.map(cell => {
+            const sourceProperties = {
+                ...(cell?.properties ?? {})
+            };
+
+            /*
+             * Only visual/content formatting is inherited. Merge topology is
+             * structural and must never be copied into a newly created row.
+             */
+            delete sourceProperties.rowspan;
+            delete sourceProperties.colspan;
+            delete sourceProperties.mergedInto;
+            delete sourceProperties.mergeOriginalContent;
+            delete sourceProperties.mergeOriginalProperties;
+
+            return {
+                content: '',
+                properties: sourceProperties
+            };
+        });
+    }
+
+    #insertTableRow(block, insertionIndex) {
+        const columnCount = Math.max(
+            1,
+            block.rows?.[0]?.length ?? 1
+        );
+        const merges = this.#getTableMergeDescriptors(block);
+
+        this.#clearTableMergeMetadata(block);
+
+        block.rows.splice(
+            insertionIndex,
+            0,
+            Array.from(
+                { length: columnCount },
+                () => ({ content: '', properties: {} })
+            )
+        );
+
+        for (const merge of merges) {
+            const mergeStart = merge.row;
+            const mergeEndExclusive =
+                merge.row + merge.rowspan;
+
+            if (insertionIndex <= mergeStart) {
+                /*
+                 * The new row is inserted before the merge, so the anchor and
+                 * all covered logical coordinates move down by one row.
+                 */
+                merge.row += 1;
+            } else if (
+                insertionIndex > mergeStart
+                && insertionIndex < mergeEndExclusive
+            ) {
+                /*
+                 * Insertion occurs inside the merged vertical span. The new
+                 * logical row becomes part of the merge.
+                 */
+                merge.rowspan += 1;
+            }
+
+            this.#applyTableMergeDescriptor(block, merge);
+        }
+    }
+
+    #insertTableColumn(block, insertionIndex) {
+        const merges = this.#getTableMergeDescriptors(block);
+
+        this.#clearTableMergeMetadata(block);
+
+        for (const row of block.rows ?? []) {
+            row.splice(
+                insertionIndex,
+                0,
+                { content: '', properties: {} }
+            );
+        }
+
+        for (const merge of merges) {
+            const mergeStart = merge.column;
+            const mergeEndExclusive =
+                merge.column + merge.colspan;
+
+            if (insertionIndex <= mergeStart) {
+                /*
+                 * The new column is before the merge. Move the anchor and all
+                 * covered logical coordinates one column to the right.
+                 */
+                merge.column += 1;
+            } else if (
+                insertionIndex > mergeStart
+                && insertionIndex < mergeEndExclusive
+            ) {
+                /*
+                 * Insertion occurs inside the merged horizontal span. The new
+                 * logical column becomes part of the merge.
+                 */
+                merge.colspan += 1;
+            }
+
+            this.#applyTableMergeDescriptor(block, merge);
+        }
+
+        this.#resetTableColumnWidths(block);
+    }
+
+    #removeTableRow(block, rowIndex) {
+        const merges = this.#getTableMergeDescriptors(block);
+
+        this.#clearTableMergeMetadata(block);
+        block.rows.splice(rowIndex, 1);
+
+        for (const merge of merges) {
+            const endRow = merge.row + merge.rowspan - 1;
+
+            if (rowIndex < merge.row) {
+                merge.row -= 1;
+            } else if (
+                rowIndex >= merge.row
+                && rowIndex <= endRow
+            ) {
+                merge.rowspan -= 1;
+
+                if (rowIndex === merge.row) {
+                    merge.anchorMoved = true;
+                    /*
+                     * The row immediately below the removed anchor now occupies
+                     * the same logical row index.
+                     */
+                }
+            }
+
+            if (merge.rowspan <= 0) {
+                continue;
+            }
+
+            this.#applyTableMergeDescriptor(block, merge);
+        }
+    }
+
+    #removeTableColumn(block, columnIndex) {
+        const merges = this.#getTableMergeDescriptors(block);
+
+        this.#clearTableMergeMetadata(block);
+
+        for (const row of block.rows ?? []) {
+            row.splice(columnIndex, 1);
+        }
+
+        for (const merge of merges) {
+            const endColumn =
+                merge.column + merge.colspan - 1;
+
+            if (columnIndex < merge.column) {
+                merge.column -= 1;
+            } else if (
+                columnIndex >= merge.column
+                && columnIndex <= endColumn
+            ) {
+                merge.colspan -= 1;
+
+                if (columnIndex === merge.column) {
+                    merge.anchorMoved = true;
+                    /*
+                     * The cell immediately to the right of the removed anchor
+                     * now occupies the same logical column index.
+                     */
+                }
+            }
+
+            if (merge.colspan <= 0) {
+                continue;
+            }
+
+            this.#applyTableMergeDescriptor(block, merge);
+        }
+
+        this.#resetTableColumnWidths(block);
+    }
+
+    #tableStructureAction(block, action) {
+        const selected = this.selectedTableCell;
+
+        if (!selected || selected.block !== block) {
+            return;
+        }
+
+        const rowIndex = selected.rowIndex;
+        const columnIndex = selected.columnIndex;
+        const rowCount = block.rows?.length ?? 0;
+        const columnCount = block.rows?.[0]?.length ?? 0;
+
+        if (
+            action === 'remove-row'
+            && rowCount <= 1
+        ) {
+            return;
+        }
+
+        if (
+            action === 'remove-column'
+            && columnCount <= 1
+        ) {
+            return;
+        }
+
+        this.#remember();
+
+        if (action === 'row-above' || action === 'row-below') {
+            const insertionIndex =
+                rowIndex + (action === 'row-below' ? 1 : 0);
+
+            this.#insertTableRow(block, insertionIndex);
+        } else if (action === 'remove-row') {
+            this.#removeTableRow(block, rowIndex);
+        } else if (
+            action === 'column-left'
+            || action === 'column-right'
+        ) {
+            const insertionIndex =
+                columnIndex + (action === 'column-right' ? 1 : 0);
+
+            this.#insertTableColumn(block, insertionIndex);
+        } else if (action === 'remove-column') {
+            this.#removeTableColumn(block, columnIndex);
+        }
+
+        this.selectedTableCell = null;
+        this.tableSelection = null;
+        this.render();
+    }
+
+    #applyTableColumnWidths(preview, block) {
+        const widths = this.#normalizeTableColumnWidths(block);
+        const cols = Array.from(
+            preview.querySelectorAll('.vhd-table > colgroup > col')
+        );
+
+        widths.forEach((width, index) => {
+            if (cols[index]) {
+                cols[index].style.width = `${width}%`;
+            }
+        });
+
+        const widthInput = preview.querySelector(
+            '.vhd-table-toolbar-width-input'
+        );
+
+        const selected = this.selectedTableCell;
+
+        if (
+            widthInput
+            && selected
+            && selected.block === block
+        ) {
+            widthInput.value = String(
+                Math.round(widths[selected.columnIndex] ?? 100)
+            );
+        }
+    }
+
+    #createTableToolbar(preview, block) {
+        const toolbar = document.createElement('div');
+        toolbar.className = 'vhd-table-toolbar';
+        toolbar.hidden = true;
+        toolbar.setAttribute('role', 'toolbar');
+        toolbar.setAttribute(
+            'aria-label',
+            this.t.properties.tableContextMenu
+        );
+
+        const icon = path => `
+            <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                aria-hidden="true"
+                focusable="false"
+            >
+                ${path}
+            </svg>
+        `;
+
+        const button = (svg, title, action) => {
+            const control = document.createElement('button');
+            control.type = 'button';
+            control.className = 'vhd-table-toolbar-button';
+            control.innerHTML = svg;
+            control.title = title;
+            control.setAttribute('aria-label', title);
+
+            control.addEventListener('pointerdown', event => {
+                /*
+                 * Keep the current table cell/caret as the active context
+                 * while using toolbar controls.
+                 */
+                event.preventDefault();
+                event.stopPropagation();
+            });
+
+            control.addEventListener('click', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                action();
+            });
+
+            return control;
+        };
+
+        const separator = () => {
+            const item = document.createElement('span');
+            item.className = 'vhd-table-toolbar-separator';
+            item.setAttribute('aria-hidden', 'true');
+            return item;
+        };
+
+        const rowAbove = button(
+            icon(`
+                <path d="M4 7h16M4 13h16M4 19h16"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M12 2v6M9 5h6"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+            `),
+            this.t.properties.tableAddRowAbove,
+            () => this.#tableStructureAction(block, 'row-above')
+        );
+        const rowBelow = button(
+            icon(`
+                <path d="M4 5h16M4 11h16M4 17h16"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M12 16v6M9 19h6"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+            `),
+            this.t.properties.tableAddRowBelow,
+            () => this.#tableStructureAction(block, 'row-below')
+        );
+        const removeRow = button(
+            icon(`
+                <path d="M4 6h16M4 18h16"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+                <rect x="4" y="9" width="16" height="6" rx="1"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8"/>
+                <path d="M8 12h8"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+            `),
+            this.t.properties.tableRemoveCurrentRow,
+            () => this.#tableStructureAction(block, 'remove-row')
+        );
+
+        const columnLeft = button(
+            icon(`
+                <path d="M7 4v16M13 4v16M19 4v16"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M2 12h6M5 9v6"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+            `),
+            this.t.properties.tableAddColumnLeft,
+            () => this.#tableStructureAction(block, 'column-left')
+        );
+        const columnRight = button(
+            icon(`
+                <path d="M5 4v16M11 4v16M17 4v16"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M16 12h6M19 9v6"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+            `),
+            this.t.properties.tableAddColumnRight,
+            () => this.#tableStructureAction(block, 'column-right')
+        );
+        const removeColumn = button(
+            icon(`
+                <path d="M6 4v16M18 4v16"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+                <rect x="9" y="4" width="6" height="16" rx="1"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8"/>
+                <path d="M10.5 12h3"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+            `),
+            this.t.properties.tableRemoveCurrentColumn,
+            () => this.#tableStructureAction(block, 'remove-column')
+        );
+
+        const equalColumns = button(
+            icon(`
+                <rect x="3" y="5" width="18" height="14" rx="1"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8"/>
+                <path d="M9 5v14M15 5v14"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8"/>
+            `),
+            this.t.properties.tableEqualColumns,
+            () => {
+                this.#remember();
+                this.#resetTableColumnWidths(block);
+                this.#applyTableColumnWidths(preview, block);
+            }
+        );
+
+        const mergeCells = button(
+            icon(`
+                <rect x="3" y="4" width="18" height="16" rx="1"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8"/>
+                <path d="M12 7v10M7 12h10"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8" stroke-linecap="round"/>
+            `),
+            this.t.properties.tableMergeCells,
+            () => this.#mergeTableSelection(block)
+        );
+
+        const unmergeCell = button(
+            icon(`
+                <rect x="3" y="4" width="18" height="16" rx="1"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8"/>
+                <path d="M12 4v16M3 12h18"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.8"/>
+                <path d="M8 8l-2-2M16 16l2 2"
+                    fill="none" stroke="currentColor"
+                    stroke-width="1.6" stroke-linecap="round"/>
+            `),
+            this.t.properties.tableUnmergeCell,
+            () => this.#unmergeTableCell(block)
+        );
+
+        const widthField = document.createElement('label');
+        widthField.className = 'vhd-table-toolbar-width';
+        widthField.title = this.t.properties.tableColumnWidth;
+
+        const widthLabel = document.createElement('span');
+        widthLabel.className = 'vhd-table-toolbar-width-label';
+        widthLabel.textContent = this.t.properties.tableColumnWidthShort;
+
+        const widthInput = document.createElement('input');
+        widthInput.type = 'number';
+        widthInput.className = 'vhd-table-toolbar-width-input';
+        widthInput.min = '5';
+        widthInput.max = '95';
+        widthInput.step = '1';
+        widthInput.inputMode = 'numeric';
+
+        const percent = document.createElement('span');
+        percent.textContent = '%';
+
+        let widthEditStarted = false;
+
+        const rememberWidthStart = () => {
+            if (!widthEditStarted) {
+                this.#remember();
+                widthEditStarted = true;
+            }
+        };
+
+        widthInput.addEventListener('pointerdown', event => {
+            event.stopPropagation();
+            rememberWidthStart();
+        });
+
+        widthInput.addEventListener('focus', event => {
+            event.stopPropagation();
+            rememberWidthStart();
+        });
+
+        widthInput.addEventListener('keydown', event => {
+            event.stopPropagation();
+        });
+
+        /*
+         * Important: update the colgroup directly instead of calling render().
+         * The toolbar therefore stays open while using the number input arrows.
+         */
+        widthInput.addEventListener('input', event => {
+            event.stopPropagation();
+
+            const selected = this.selectedTableCell;
+
+            if (!selected || selected.block !== block) {
+                return;
+            }
+
+            rememberWidthStart();
+
+            this.#setTableColumnWidth(
+                block,
+                selected.columnIndex,
+                widthInput.value
+            );
+            this.#applyTableColumnWidths(preview, block);
+        });
+
+        widthInput.addEventListener('change', () => {
+            widthEditStarted = false;
+        });
+
+        widthInput.addEventListener('blur', () => {
+            widthEditStarted = false;
+        });
+
+        widthField.append(widthLabel, widthInput, percent);
+
+        toolbar.append(
+            rowAbove,
+            rowBelow,
+            removeRow,
+            separator(),
+            columnLeft,
+            columnRight,
+            removeColumn,
+            separator(),
+            widthField,
+            equalColumns,
+            separator(),
+            mergeCells,
+            unmergeCell
+        );
+
+        toolbar._vhdControls = {
+            rowAbove,
+            rowBelow,
+            removeRow,
+            columnLeft,
+            columnRight,
+            removeColumn,
+            equalColumns,
+            widthInput,
+            mergeCells,
+            unmergeCell
+        };
+
+        return toolbar;
+    }
+
+    #updateTableToolbar(preview, block) {
+        const toolbar = preview.querySelector('.vhd-table-toolbar');
+
+        if (!toolbar) {
+            return;
+        }
+
+        const selected = this.selectedTableCell;
+        const active = Boolean(
+            selected
+            && selected.block === block
+        );
+
+        toolbar.hidden = !active;
+
+        if (!active) {
+            return;
+        }
+
+        const rowCount = block.rows?.length ?? 0;
+        const columnCount = block.rows?.[0]?.length ?? 0;
+        const widths = this.#normalizeTableColumnWidths(block);
+        const controls = toolbar._vhdControls;
+        const selectedCells = this.#getSelectedTableCells(block);
+        const multiple = selectedCells.length > 1;
+        const bounds = this.#getTableSelectionBounds(block);
+        const wholeRowSelection = Boolean(
+            bounds
+            && bounds.minRow === bounds.maxRow
+            && bounds.minColumn === 0
+            && bounds.maxColumn === columnCount - 1
+        );
+        const wholeColumnSelection = Boolean(
+            bounds
+            && bounds.minColumn === bounds.maxColumn
+            && bounds.minRow === 0
+            && bounds.maxRow === rowCount - 1
+        );
+        const selectedMerge = this.#getTableMergeAnchor(
+            block,
+            selected.rowIndex,
+            selected.columnIndex
+        );
+
+        if (!controls) {
+            return;
+        }
+
+        /*
+         * A free multi-cell rectangle remains ambiguous for structural
+         * operations. A complete row or complete column selection is not:
+         * keep the matching add/remove actions available.
+         */
+        controls.rowAbove.disabled =
+            multiple && !wholeRowSelection;
+        controls.rowBelow.disabled =
+            multiple && !wholeRowSelection;
+        controls.removeRow.disabled =
+            rowCount <= 1
+            || (multiple && !wholeRowSelection);
+
+        controls.columnLeft.disabled =
+            multiple && !wholeColumnSelection;
+        controls.columnRight.disabled =
+            multiple && !wholeColumnSelection;
+        controls.removeColumn.disabled =
+            columnCount <= 1
+            || (multiple && !wholeColumnSelection);
+
+        controls.equalColumns.disabled = multiple;
+        controls.widthInput.disabled =
+            multiple || columnCount <= 1;
+        controls.mergeCells.disabled =
+            !this.#canMergeTableSelection(block);
+        controls.unmergeCell.disabled = !selectedMerge;
+        controls.widthInput.min = columnCount <= 1 ? '100' : '5';
+        controls.widthInput.max = columnCount <= 1 ? '100' : '95';
+
+        if (!multiple) {
+            controls.widthInput.value = String(
+                Math.round(widths[selected.columnIndex] ?? 100)
+            );
+        }
+    }
+
+    #cleanTableCellContent(value) {
+        const template = document.createElement('template');
+        template.innerHTML = String(value ?? '');
+
+        template.content
+            .querySelectorAll('.vhd-table-cell-menu-trigger')
+            .forEach(element => element.remove());
+
+        return template.innerHTML;
+    }
+
+    #renderTable(preview, block) {
+        preview.replaceChildren();
+
+        block.rows ??= [];
+        block.properties ??= {};
+        const properties = block.properties;
+        const hasHeader = properties.header !== false;
+        const borderColor = properties.borderColor || '#d8dde5';
+        const borderWidth = Math.max(0, Number(properties.borderWidth ?? 1));
+        const cellPadding = Math.max(0, Number(properties.cellPadding ?? 8));
+        const headerBackground = properties.headerBackground || '#f3f4f6';
+
+        const toolbar = this.#createTableToolbar(preview, block);
+
+        const table = document.createElement('table');
+        table.className = 'vhd-table';
+        table.style.width = '100%';
+        table.style.borderCollapse = 'collapse';
+        table.style.tableLayout = 'fixed';
+
+        const columnWidths = this.#normalizeTableColumnWidths(block);
+        const colgroup = document.createElement('colgroup');
+
+        columnWidths.forEach(width => {
+            const col = document.createElement('col');
+            col.style.width = `${width}%`;
+            colgroup.append(col);
+        });
+
+        table.append(colgroup);
+
+        block.rows.forEach((row, rowIndex) => {
+            const tr = document.createElement('tr');
+
+            row.forEach((cell, columnIndex) => {
+                cell ??= { content: '' };
+                cell.properties ??= {};
+
+                if (cell.properties.mergedInto) {
+                    return;
+                }
+
+                const isHeader = hasHeader && rowIndex === 0;
+                const td = document.createElement(isHeader ? 'th' : 'td');
+
+                /*
+                 * 0.6.67 placed the contextual menu trigger directly inside
+                 * the contenteditable cell. That allowed the button to become
+                 * part of cell.content and therefore leak into public HTML.
+                 * Clean legacy content and keep editor controls as siblings.
+                 */
+                cell.content = this.#cleanTableCellContent(cell.content);
+
+                const cellBorderWidth = Math.max(
+                    0,
+                    Number(
+                        cell.properties.borderWidth
+                        ?? borderWidth
+                    )
+                );
+                const cellBorderStyle = [
+                    'solid',
+                    'dashed',
+                    'dotted',
+                    'none'
+                ].includes(cell.properties.borderStyle)
+                    ? cell.properties.borderStyle
+                    : 'solid';
+                const cellBorderColor =
+                    cell.properties.borderColor
+                    || borderColor;
+
+                const cellSpecificPadding = Math.max(
+                    0,
+                    Number(
+                        cell.properties.padding
+                        ?? cellPadding
+                    )
+                );
+
+                td.style.borderWidth = `${cellBorderWidth}px`;
+                td.style.borderStyle = cellBorderStyle;
+                td.style.borderColor = cellBorderColor;
+
+                /*
+                 * `hidden` is intentional here. With border-collapse,
+                 * `border-style:none` can still allow the neighbouring
+                 * cell's border to win the conflict. `hidden` suppresses
+                 * the shared edge reliably.
+                 */
+                if (cell.properties.borderTopEnabled === false) {
+                    td.style.borderTopStyle = 'hidden';
+                }
+                if (cell.properties.borderRightEnabled === false) {
+                    td.style.borderRightStyle = 'hidden';
+                }
+                if (cell.properties.borderBottomEnabled === false) {
+                    td.style.borderBottomStyle = 'hidden';
+                }
+                if (cell.properties.borderLeftEnabled === false) {
+                    td.style.borderLeftStyle = 'hidden';
+                }
+
+                td.style.padding = `${cellSpecificPadding}px`;
+                td.style.textAlign =
+                    cell.properties.textAlign || 'left';
+                td.style.verticalAlign =
+                    cell.properties.verticalAlign || 'top';
+                td.style.color =
+                    cell.properties.color || '';
+                td.style.backgroundColor =
+                    cell.properties.backgroundColor || '';
+
+                if (isHeader) {
+                    if (!cell.properties.backgroundColor) {
+                        td.style.backgroundColor = headerBackground;
+                    }
+                    td.scope = 'col';
+                }
+
+                td.dataset.rowIndex = String(rowIndex);
+                td.dataset.columnIndex = String(columnIndex);
+
+                const rowSpan = Math.max(
+                    1,
+                    Number(cell.properties.rowspan ?? 1)
+                );
+                const colSpan = Math.max(
+                    1,
+                    Number(cell.properties.colspan ?? 1)
+                );
+
+                if (rowSpan > 1) {
+                    td.rowSpan = rowSpan;
+                }
+
+                if (colSpan > 1) {
+                    td.colSpan = colSpan;
+                }
+
+                td.innerHTML = cell.content || '';
+                this.#editable(td, cell, 'content');
+
+                const selectCell = (event, extend = false) => {
+                    event?.stopPropagation?.();
+
+                    this.#setTableSelection(
+                        block,
+                        rowIndex,
+                        columnIndex,
+                        extend
+                    );
+
+                    this.#refreshTableSelection(preview, block);
+
+                    this.#selectProperties(
+                        'block',
+                        block,
+                        preview.closest('.vhd-block')
+                    );
+
+                    this.#updateTableToolbar(preview, block);
+                };
+
+                /*
+                 * Pointer down captures Shift before focus changes. This keeps
+                 * the original anchor and creates a rectangular temporary
+                 * selection without altering the persisted JSON structure.
+                 */
+                td.addEventListener('pointerdown', event => {
+                    if (event.button !== 0) {
+                        return;
+                    }
+
+                    selectCell(event, event.shiftKey);
+
+                    if (!event.shiftKey) {
+                        /*
+                         * Always arm the drag gesture. The drag handler keeps
+                         * native text selection while the pointer remains in
+                         * the starting logical cell, and only switches to
+                         * rectangular cell selection after crossing into a
+                         * different logical cell.
+                         */
+                        this.#beginTableCellDrag(
+                            preview,
+                            block,
+                            rowIndex,
+                            columnIndex,
+                            event
+                        );
+                    }
+                });
+
+                td.addEventListener('focus', event => {
+                    /*
+                     * Multi-cell formatting temporarily moves the browser DOM
+                     * selection through every selected contenteditable cell.
+                     * Those internal focus changes must not collapse the VHD
+                     * logical table selection back to one cell.
+                     */
+                    if (this.isFormattingTableSelection) {
+                        return;
+                    }
+
+                    const current = this.selectedTableCell;
+
+                    if (
+                        !current
+                        || current.block !== block
+                        || current.rowIndex !== rowIndex
+                        || current.columnIndex !== columnIndex
+                    ) {
+                        selectCell(event, false);
+                    }
+                });
+
+                td.addEventListener('contextmenu', event => {
+                    event.preventDefault();
+                    selectCell(event, event.shiftKey);
+                });
+
+                /*
+                 * Native Tab/Shift+Tab navigation already works between table
+                 * cells. Only intercept Tab when the current visible cell
+                 * reaches the logical bottom-right corner of the table.
+                 */
+                td.addEventListener('keydown', event => {
+                    if (
+                        event.key === 'Delete'
+                        && !event.shiftKey
+                        && !event.altKey
+                        && !event.ctrlKey
+                        && !event.metaKey
+                    ) {
+                        if (
+                            this.#clearSelectedTableCellContents(
+                                preview,
+                                block
+                            )
+                        ) {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            return;
+                        }
+                    }
+
+                    if (
+                        event.key !== 'Tab'
+                        || event.shiftKey
+                        || event.altKey
+                        || event.ctrlKey
+                        || event.metaKey
+                    ) {
+                        return;
+                    }
+
+                    const rowCount = block.rows?.length ?? 0;
+                    const columnCount =
+                        block.rows?.[0]?.length ?? 0;
+                    const reachesLastRow =
+                        rowIndex + rowSpan >= rowCount;
+                    const reachesLastColumn =
+                        columnIndex + colSpan >= columnCount;
+
+                    if (!reachesLastRow || !reachesLastColumn) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+
+                    this.#remember();
+
+                    const inheritedFormatting =
+                        this.#cloneTableRowFormatting(
+                            block,
+                            Math.max(0, rowCount - 1)
+                        );
+
+                    this.#insertTableRow(block, rowCount);
+
+                    /*
+                     * A row created with Tab should feel like a continuation
+                     * of the current table. Reuse the previous row's visual
+                     * formatting while starting with empty contents.
+                     */
+                    block.rows[rowCount] = inheritedFormatting;
+
+                    const nextRowIndex = rowCount;
+
+                    this.tableSelection = {
+                        block,
+                        anchorRow: nextRowIndex,
+                        anchorColumn: 0,
+                        focusRow: nextRowIndex,
+                        focusColumn: 0
+                    };
+                    this.selectedTableCell = {
+                        block,
+                        rowIndex: nextRowIndex,
+                        columnIndex: 0
+                    };
+
+                    this.render();
+                    this.#focusTableCell(
+                        block,
+                        nextRowIndex,
+                        0
+                    );
+                });
+
+                tr.append(td);
+            });
+
+            table.append(tr);
+        });
+
+        const tableScroll = document.createElement('div');
+        tableScroll.className = 'vhd-table-scroll';
+        tableScroll.append(table);
+
+        preview.append(toolbar, tableScroll);
+
+        const selectionLayer = this.#createTableSelectionLayer(
+            preview,
+            block,
+            tableScroll,
+            table
+        );
+
+        if (selectionLayer) {
+            preview.append(selectionLayer);
+        }
+
+        const resizeLayer = this.#createTableResizeLayer(
+            preview,
+            block,
+            tableScroll,
+            table
+        );
+
+        if (resizeLayer) {
+            tableScroll.append(resizeLayer);
+        }
+    }
+
     #renderResizableImage(preview, block, blockElement) {
         preview.replaceChildren();
         preview.classList.toggle('is-empty', !block.src);
@@ -2976,6 +5936,14 @@ export default class Editor {
             preview.className = 'vhd-image-editor';
 
             this.#renderResizableImage(preview, block, wrapper);
+            wrapper.append(preview);
+        }
+
+        if (block.type === 'table') {
+            const preview = document.createElement('div');
+            preview.className = 'vhd-table-editor';
+            preview.dataset.blockId = block.id;
+            this.#renderTable(preview, block);
             wrapper.append(preview);
         }
 

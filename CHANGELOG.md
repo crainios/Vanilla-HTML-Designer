@@ -2,6 +2,125 @@
 
 All notable changes to Vanilla HTML Designer will be documented in this file.
 
+## [0.6.110] - 2026-08-25
+
+### Fixed
+
+- Corrected the 0.6.109 visual-target mistake: the shadow is now applied to the complete zone/section (`.vhd-row-editor`), not to its internal columns.
+- Restored the original 0.6.108 column presentation.
+- The zone border is visually replaced by a medium shadow.
+- Hover, selection and focus slightly strengthen the zone shadow while keeping the zone border transparent.
+
+## [0.6.109] - 2026-08-25
+
+### Changed
+
+- Replaced the visual border used for section/column placement with a medium shadow.
+- Section containers now use a cleaner card-like presentation.
+- Hover/focus within a section slightly strengthens the shadow instead of relying on a dashed border.
+
+## [0.6.108] - 2026-08-25
+
+### Changed
+
+- Restyled the "Custom actions" toolbar button as a compact split-button.
+- The button now matches the requested visual style: a small square "+" area followed by a separate dropdown caret area.
+- The control keeps the same behavior, title and accessibility attributes.
+- Hover and active states were adapted specifically for the new split-button appearance.
+
+## [0.6.107] - 2026-08-25
+
+### Changed
+
+- Redesigned the visual relationship between the main toolbar and the editor workspace.
+- Added a subtle drop shadow under the main toolbar.
+- Added one common bordered frame around both the editor canvas and the Properties panel.
+- Added light inner padding to the common workspace frame.
+- Removed the visual gap between toolbar and workspace so the toolbar reads as the header of the complete editor assembly.
+- The Properties panel keeps its own light boundary as a contextual sub-panel.
+- Responsive layout remains unchanged.
+
+## [0.6.106] - 2026-08-24
+
+### Fixed
+
+- Fixed the inline-image resize overlay remaining visible after the image itself was deleted.
+- The editor now observes inline-image removal and immediately destroys the external resize frame and handles.
+- The geometry updater also self-cleans if the tracked image is no longer connected.
+- Normal editable `input` events perform an additional stale-overlay check, covering keyboard Delete/Backspace and browser editing paths.
+- The fix applies equally to inline images in normal text areas and table cells.
+
+## [0.6.105] - 2026-08-24
+
+### Fixed
+
+- Fixed persistent main-toolbar dropdown menus.
+- Complementary formatting, Lists, Alignment and Custom actions now close when clicking anywhere outside a toolbar dropdown.
+- Clicking the canvas, Properties panel or a normal toolbar button closes all open dropdowns.
+- Clicking inside the currently open dropdown keeps it open until an action is chosen.
+- Switching directly to another dropdown still closes the previous one before opening the new one.
+
+## [0.6.104] - 2026-08-24
+
+### Fixed
+
+- Fixed table row/column selector overlays becoming misaligned after internal table layout changes.
+- Selector geometry now reacts to row-height changes caused by text wrapping, inline-image resizing, padding/border changes and merged-cell content.
+- Added a `ResizeObserver` on the table and rendered rows.
+- Added a `MutationObserver` for table structure and relevant style/span changes.
+- Selector geometry updates are coalesced through `requestAnimationFrame()` to avoid excessive recalculation.
+- Window resizing and horizontal table scrolling now use the same synchronized geometry update path.
+- Observers automatically disconnect when the rendered table/selection layer is removed.
+
+## [0.6.103] - 2026-08-24
+
+### Added
+
+- The main toolbar alignment menu is now contextual for selected inline images.
+- With an inline image selected, Align Left, Center and Align Right move the image instead of aligning its containing text or table cell.
+- Image selection takes precedence over an underlying table-cell selection.
+- Justify is intentionally ignored while an inline image is selected because it has no meaningful image-layout equivalent.
+
+### Fixed
+
+- The inline-image resize overlay is immediately repositioned after changing image alignment, both from the main toolbar and from the Properties panel.
+- Toolbar image alignment is persisted through the same `data-align` and cell/text HTML synchronization used by the Properties panel.
+
+## [0.6.102] - 2026-08-24
+
+### Fixed
+
+- Fixed Left / Center / Right alignment of inline images inside table cells.
+- Inline-image alignment now resets the complete alignment state before applying the requested position, avoiding stale `float`, `display` or margin styles.
+- Inline images now use block layout with explicit left/right auto margins for reliable alignment inside `<td>` / `<th>`.
+- Alignment changes are written immediately to the logical table-cell content as well as through the normal synthetic input event.
+- Mouse resizing keeps the selected alignment and no longer risks restoring an older layout state.
+- The same inline-image alignment logic remains valid in normal text blocks.
+
+## [0.6.101] - 2026-08-24
+
+### Fixed
+
+- Fixed inline-image resize handles not appearing reliably inside table cells.
+- Root cause: the 0.6.100 overlay used coordinates relative to the VHD root while its absolute positioning could resolve against a different containing block.
+- The resize overlay is now attached to `document.body` and uses `position: fixed` with the image's viewport `getBoundingClientRect()` coordinates.
+- The overlay follows page scrolling, ancestor scrolling, horizontal table scrolling and viewport resizing.
+- Added listener cleanup when the image is deselected to avoid stale handlers.
+- Inline images are now selected on pointer-down as well as click, preventing table-cell pointer gesture handling from delaying the resize UI.
+- The overlay uses an editor-level high z-index so table selection/resizing layers cannot cover its handles.
+
+## [0.6.100] - 2026-08-24
+
+### Added
+
+- Added direct mouse resizing for inline images.
+- Inline images now display left/right resize handles when selected.
+- The resize handles are rendered in an editor-only overlay outside the editable HTML, so they are never persisted in saved content.
+- Resizing uses the width of the containing editable area and stores the result in the existing `data-size` percentage.
+- The same mechanism works inside normal text blocks and inside table cells.
+- Table horizontal scrolling is taken into account when positioning the resize overlay.
+- The existing inline-image Properties panel stays synchronized after mouse resizing.
+
 ## [0.6.99] - 2026-08-24
 
 ### Added

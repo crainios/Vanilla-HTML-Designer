@@ -1366,3 +1366,79 @@ the selected cell contents while preserving structure and formatting.
 Table-cell borders can also be enabled or disabled independently on the Top,
 Right, Bottom and Left sides. Disabled edges use CSS `hidden` so collapsed
 table borders cannot be restored by the neighbouring cell.
+
+
+### Mouse resizing for inline images
+
+Since 0.6.100, inline images can be resized directly with left/right mouse
+handles. The handles are editor-only overlays and work equally in text blocks
+and table cells. The resulting width is stored through the existing
+`data-size` percentage and remains synchronized with the Properties panel.
+
+
+### Reliable inline-image resize handles in tables
+
+Since 0.6.101, inline-image resize handles use a viewport-fixed overlay attached
+to `document.body`. This makes the handles independent from table overflow,
+horizontal scrolling and nested editor layout containers.
+
+
+### Inline-image alignment inside table cells
+
+Since 0.6.102, Left, Center and Right alignment of inline images is applied
+through explicit block/margin layout and persisted immediately in the logical
+table-cell HTML. The same state is preserved when the image is resized.
+
+
+### Contextual main-toolbar alignment for inline images
+
+Since 0.6.103, selecting an inline image changes the meaning of the main
+alignment menu: Left, Center and Right align the image itself. Outside an image
+selection, the same controls continue to format text or selected table cells.
+
+
+### Reactive table selector geometry
+
+Since 0.6.104, table row/column selector overlays automatically follow
+rendered geometry changes. Text wrapping, inline-image resizing, cell padding,
+borders, merges and structural DOM changes trigger a synchronized geometry
+refresh through `ResizeObserver` / `MutationObserver`.
+
+
+### Toolbar dropdown dismissal
+
+Since 0.6.105, main-toolbar dropdowns close automatically whenever the user
+clicks outside a toolbar dropdown. This applies to complementary formatting,
+Lists, Alignment and Custom actions.
+
+
+### Inline-image resize overlay cleanup
+
+Since 0.6.106, deleting a selected inline image immediately removes its
+editor-only resize frame and handles. This works in both normal editable text
+and table cells, including keyboard deletion.
+
+
+### Unified toolbar and editor frame
+
+Since 0.6.107, the main toolbar visually forms the header of a common framed
+workspace containing both the editable canvas and the Properties panel. The
+toolbar has a subtle lower shadow and the workspace adds a small inner padding.
+
+
+### Custom actions split-button
+
+Since 0.6.108, the Custom actions toolbar control uses a compact split-button
+appearance with a dedicated "+" segment and a dedicated dropdown-caret segment.
+
+
+### Section shadow presentation
+
+Since 0.6.109, the visual placement of sections/columns uses a medium shadow
+instead of a dashed border.
+
+
+### Zone shadow presentation
+
+Since 0.6.110, the medium shadow applies to the complete editor zone/section,
+not to its internal columns. Column styling remains unchanged from 0.6.108.

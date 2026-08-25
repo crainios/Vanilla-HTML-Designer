@@ -105,7 +105,7 @@ export default class Editor {
             fullscreen: () => this.toggleFullscreen(),
             searchReplace: () => this.#showSearchReplaceDialog(),
             formatSelection: (command, value) =>
-                this.#formatTableCellSelection(command, value),
+                this.#formatContextualSelection(command, value),
             insertInlineImage: editable => this.#insertInlineImage(editable),
             insertVideo: editable => this.#insertVideo(editable),
             insertCode: editable => this.#showInsertCodeDialog(editable)
@@ -2787,6 +2787,7 @@ export default class Editor {
     }
 
     #selectInlineLink(link) {
+        this.#removeInlineImageResizeOverlay();
         this.root.querySelectorAll('.vhd-inline-image.is-selected').forEach(item => item.classList.remove('is-selected'));
         this.root.querySelectorAll('.vhd-selected').forEach(item => item.classList.remove('vhd-selected'));
 
@@ -2794,39 +2795,288 @@ export default class Editor {
     }
 
     #applyInlineImageStyles(image) {
-        const align = image.dataset.align || 'left';
-        const size = Math.min(100, Math.max(1, Number(image.dataset.size || 33)));
-        const spacing = Math.max(0, Number(image.dataset.spacing || 0));
+        const align = ['left', 'center', 'right'].includes(image.dataset.align)
+            ? image.dataset.align
+            : 'left';
+        const size = Math.min(
+            100,
+            Math.max(1, Number(image.dataset.size || 33))
+        );
+        const spacing = Math.max(
+            0,
+            Number(image.dataset.spacing || 0)
+        );
 
         image.dataset.align = align;
         image.dataset.size = String(size);
         image.dataset.spacing = String(spacing);
         image.style.width = `${size}%`;
+        image.style.maxWidth = '100%';
         image.style.height = 'auto';
 
+        /*
+         * Inline images can live directly inside a contenteditable table
+         * cell. Apply a complete alignment state every time instead of only
+         * changing a subset of float/display/margin declarations. This avoids
+         * stale styles from a previous alignment winning inside <td>/<th>.
+         */
+        image.style.removeProperty('float');
+        image.style.display = 'block';
+        image.style.clear = 'none';
+
         if (align === 'right') {
-            image.style.float = 'right';
-            image.style.display = '';
-            image.style.margin = `${spacing}px 0 ${spacing}px ${spacing}px`;
+            image.style.marginTop = `${spacing}px`;
+            image.style.marginRight = '0';
+            image.style.marginBottom = `${spacing}px`;
+            image.style.marginLeft = 'auto';
         } else if (align === 'center') {
-            image.style.float = 'none';
-            image.style.display = 'block';
-            image.style.margin = `${spacing}px auto`;
+            image.style.marginTop = `${spacing}px`;
+            image.style.marginRight = 'auto';
+            image.style.marginBottom = `${spacing}px`;
+            image.style.marginLeft = 'auto';
         } else {
-            image.style.float = 'left';
-            image.style.display = '';
-            image.style.margin = `${spacing}px ${spacing}px ${spacing}px 0`;
+            image.style.marginTop = `${spacing}px`;
+            image.style.marginRight = 'auto';
+            image.style.marginBottom = `${spacing}px`;
+            image.style.marginLeft = '0';
         }
     }
 
     #syncInlineImage(image) {
         const editable = image.closest('[contenteditable="true"]');
 
-        editable?.dispatchEvent(new InputEvent('input', {
+        if (!(editable instanceof HTMLElement)) {
+            return;
+        }
+
+        /*
+         * #editable() normally persists through the synthetic input event.
+         * Table cells also keep an explicit logical-cell model, so update its
+         * content immediately to avoid any browser differences around input
+         * events generated from <td>/<th contenteditable>.
+         */
+        const tablePreview = editable.closest('.vhd-table-editor');
+
+        if (tablePreview) {
+            const block = this.tableSelection?.block
+                || this.selectedTableCell?.block;
+            const rowIndex = Number(editable.dataset.rowIndex);
+            const columnIndex = Number(editable.dataset.columnIndex);
+            const cell = block?.rows?.[rowIndex]?.[columnIndex];
+
+            if (cell) {
+                cell.content = editable.innerHTML;
+            }
+        }
+
+        editable.dispatchEvent(new InputEvent('input', {
             bubbles: true,
             inputType: 'formatImage',
             data: null
         }));
+    }
+
+    #removeInlineImageResizeOverlay() {
+        if (this.inlineImageResizeOverlayCleanup) {
+            this.inlineImageResizeOverlayCleanup();
+            this.inlineImageResizeOverlayCleanup = null;
+        }
+
+        this.inlineImageResizeOverlay?.remove();
+        this.inlineImageResizeOverlay = null;
+    }
+
+    #showInlineImageResizeOverlay(image) {
+        this.#removeInlineImageResizeOverlay();
+
+        const editable = image.closest('[contenteditable="true"]');
+
+        if (!(editable instanceof HTMLElement)) {
+            return;
+        }
+
+        const overlay = document.createElement('div');
+        overlay.className = 'vhd-inline-image-resize-overlay';
+        overlay.setAttribute('aria-hidden', 'true');
+
+        const updateGeometry = () => {
+            if (!image.isConnected) {
+                this.#removeInlineImageResizeOverlay();
+                return;
+            }
+
+            if (!overlay.isConnected) {
+                return;
+            }
+
+            const imageRect = image.getBoundingClientRect();
+
+            /*
+             * The overlay is fixed to the viewport and attached to <body>.
+             * This avoids every offset/overflow/stacking-context ambiguity
+             * introduced by table cells, horizontal scrolling and nested VHD
+             * layout containers.
+             */
+            overlay.style.left = `${imageRect.left}px`;
+            overlay.style.top = `${imageRect.top}px`;
+            overlay.style.width = `${imageRect.width}px`;
+            overlay.style.height = `${imageRect.height}px`;
+        };
+
+        const createHandle = side => {
+            const handle = document.createElement('span');
+            handle.className =
+                `vhd-inline-image-resize-handle vhd-inline-image-resize-handle-${side}`;
+            handle.dataset.side = side;
+
+            handle.addEventListener('pointerdown', event => {
+                if (event.button !== 0) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.stopPropagation();
+
+                const startX = event.clientX;
+                const startWidth = image.getBoundingClientRect().width;
+                const containerWidth =
+                    editable.getBoundingClientRect().width || 1;
+                const direction = side === 'left' ? -1 : 1;
+
+                overlay.classList.add('is-resizing');
+                handle.setPointerCapture?.(event.pointerId);
+
+                const onMove = moveEvent => {
+                    moveEvent.preventDefault();
+
+                    const delta =
+                        (moveEvent.clientX - startX) * direction;
+                    const widthPx = Math.max(
+                        20,
+                        Math.min(
+                            containerWidth,
+                            startWidth + delta
+                        )
+                    );
+                    const percent = Math.min(
+                        100,
+                        Math.max(
+                            1,
+                            widthPx / containerWidth * 100
+                        )
+                    );
+
+                    image.dataset.size =
+                        String(Math.round(percent * 10) / 10);
+
+                    this.#applyInlineImageStyles(image);
+                    updateGeometry();
+                };
+
+                const onEnd = endEvent => {
+                    handle.releasePointerCapture?.(endEvent.pointerId);
+                    handle.removeEventListener(
+                        'pointermove',
+                        onMove
+                    );
+                    handle.removeEventListener(
+                        'pointerup',
+                        onEnd
+                    );
+                    handle.removeEventListener(
+                        'pointercancel',
+                        onEnd
+                    );
+
+                    overlay.classList.remove('is-resizing');
+
+                    this.#syncInlineImage(image);
+                    this.#showInlineImageProperties(image);
+                    updateGeometry();
+                };
+
+                handle.addEventListener('pointermove', onMove);
+                handle.addEventListener('pointerup', onEnd);
+                handle.addEventListener('pointercancel', onEnd);
+            });
+
+            return handle;
+        };
+
+        overlay.append(
+            createHandle('left'),
+            createHandle('right')
+        );
+
+        document.body.append(overlay);
+        this.inlineImageResizeOverlay = overlay;
+
+        const onViewportChange = () => updateGeometry();
+        const tableScroll = image.closest('.vhd-table-scroll');
+
+        /*
+         * Capture page/ancestor scrolling as well as table horizontal
+         * scrolling. The overlay must remain glued to the image until it is
+         * deselected.
+         */
+        window.addEventListener(
+            'resize',
+            onViewportChange,
+            { passive: true }
+        );
+        document.addEventListener(
+            'scroll',
+            onViewportChange,
+            { passive: true, capture: true }
+        );
+
+        if (tableScroll) {
+            tableScroll.addEventListener(
+                'scroll',
+                onViewportChange,
+                { passive: true }
+            );
+        }
+
+        /*
+         * The resize frame is outside the editable content. If the image is
+         * deleted, the frame must therefore be removed explicitly.
+         */
+        const removalObserver = typeof MutationObserver === 'function'
+            ? new MutationObserver(() => {
+                if (!image.isConnected) {
+                    this.#removeInlineImageResizeOverlay();
+                }
+            })
+            : null;
+
+        removalObserver?.observe(this.root, {
+            subtree: true,
+            childList: true
+        });
+
+        this.inlineImageResizeOverlayCleanup = () => {
+            window.removeEventListener(
+                'resize',
+                onViewportChange
+            );
+            document.removeEventListener(
+                'scroll',
+                onViewportChange,
+                true
+            );
+
+            if (tableScroll) {
+                tableScroll.removeEventListener(
+                    'scroll',
+                    onViewportChange
+                );
+            }
+
+            removalObserver?.disconnect();
+        };
+
+        requestAnimationFrame(updateGeometry);
     }
 
     #showInlineImageProperties(image) {
@@ -2849,6 +3099,7 @@ export default class Editor {
                     image.dataset.align = value;
                     this.#applyInlineImageStyles(image);
                     this.#syncInlineImage(image);
+                    this.#showInlineImageResizeOverlay(image);
                 },
                 [
                     ['left', this.t.properties.left],
@@ -2911,6 +3162,7 @@ export default class Editor {
         }
 
         this.#applyInlineImageStyles(image);
+        this.#showInlineImageResizeOverlay(image);
         this.#showInlineImageProperties(image);
     }
 
@@ -3045,6 +3297,23 @@ export default class Editor {
             this.#pastePlainText(event, element);
         });
 
+        element.addEventListener('pointerdown', event => {
+            const image = event.target.closest?.('.vhd-inline-image');
+
+            if (
+                image
+                && element.contains(image)
+                && event.button === 0
+            ) {
+                /*
+                 * Select inline images on pointer-down as well as click. This
+                 * is important inside table cells, whose own pointer gesture
+                 * handler also participates in selection.
+                 */
+                this.#selectInlineImage(image);
+            }
+        });
+
         element.addEventListener('click', event => {
             const link = event.target.closest?.('a');
 
@@ -3062,7 +3331,13 @@ export default class Editor {
                 event.preventDefault();
                 event.stopPropagation();
                 this.#selectInlineImage(image);
+                return;
             }
+
+            this.#removeInlineImageResizeOverlay();
+            this.root.querySelectorAll(
+                '.vhd-inline-image.is-selected'
+            ).forEach(item => item.classList.remove('is-selected'));
         });
 
         element.addEventListener('vhd:heading-level', event => {
@@ -3099,6 +3374,18 @@ export default class Editor {
 
         element.addEventListener('input', () => {
             block[property] = element.innerHTML;
+
+            const selectedImage = this.root.querySelector(
+                '.vhd-inline-image.is-selected'
+            );
+
+            if (
+                this.inlineImageResizeOverlay
+                && !(selectedImage instanceof HTMLImageElement)
+            ) {
+                this.#removeInlineImageResizeOverlay();
+            }
+
             this.#updateDocumentStatistics();
         });
 
@@ -3368,13 +3655,89 @@ export default class Editor {
 
         };
 
+        let geometryFrame = null;
+
+        const scheduleGeometryUpdate = () => {
+            if (geometryFrame !== null) {
+                cancelAnimationFrame(geometryFrame);
+            }
+
+            geometryFrame = requestAnimationFrame(() => {
+                geometryFrame = null;
+
+                if (
+                    !preview.isConnected
+                    || !table.isConnected
+                    || !layer.isConnected
+                ) {
+                    resizeObserver?.disconnect();
+                    mutationObserver?.disconnect();
+                    return;
+                }
+
+                updateGeometry();
+            });
+        };
+
         tableScroll.addEventListener(
             'scroll',
-            updateGeometry,
+            scheduleGeometryUpdate,
             { passive: true }
         );
 
-        requestAnimationFrame(updateGeometry);
+        /*
+         * Row selector geometry depends on the actual rendered row heights.
+         * Text wrapping, inline-image resizing, padding/border changes and
+         * merged-cell content can all change those heights without causing a
+         * window resize or table-scroll event.
+         */
+        const resizeObserver = typeof ResizeObserver === 'function'
+            ? new ResizeObserver(() => {
+                scheduleGeometryUpdate();
+            })
+            : null;
+
+        resizeObserver?.observe(table);
+
+        Array.from(table.rows ?? []).forEach(row => {
+            resizeObserver?.observe(row);
+        });
+
+        /*
+         * Column widths and table structure can also be changed through
+         * inline styles or DOM updates while the overall table size remains
+         * unchanged. Observe those mutations so row/column selectors stay
+         * aligned with the logical grid.
+         */
+        const mutationObserver = typeof MutationObserver === 'function'
+            ? new MutationObserver(() => {
+                Array.from(table.rows ?? []).forEach(row => {
+                    resizeObserver?.observe(row);
+                });
+
+                scheduleGeometryUpdate();
+            })
+            : null;
+
+        mutationObserver?.observe(table, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            attributeFilter: [
+                'style',
+                'rowspan',
+                'colspan'
+            ],
+            characterData: true
+        });
+
+        window.addEventListener(
+            'resize',
+            scheduleGeometryUpdate,
+            { passive: true }
+        );
+
+        scheduleGeometryUpdate();
 
         return layer;
     }
@@ -3784,6 +4147,47 @@ export default class Editor {
         };
 
         this.render();
+    }
+
+    #formatContextualSelection(command, value = null) {
+        const selectedImage = this.root.querySelector(
+            '.vhd-inline-image.is-selected'
+        );
+
+        /*
+         * An explicitly selected inline image takes precedence over its
+         * containing text/table cell. This matches the visual selection the
+         * user sees and makes the main alignment menu truly contextual.
+         */
+        if (
+            selectedImage instanceof HTMLImageElement
+            && command === 'alignment'
+        ) {
+            if (!['left', 'center', 'right'].includes(value)) {
+                /*
+                 * Justification has no meaningful image equivalent. Consume
+                 * the command while an image is selected rather than applying
+                 * it unexpectedly to the containing cell or paragraph.
+                 */
+                return true;
+            }
+
+            this.#remember();
+            selectedImage.dataset.align = value;
+            this.#applyInlineImageStyles(selectedImage);
+            this.#syncInlineImage(selectedImage);
+
+            /*
+             * Alignment changes move the image, so rebuild the fixed resize
+             * overlay around its new position and keep Properties in sync.
+             */
+            this.#showInlineImageResizeOverlay(selectedImage);
+            this.#showInlineImageProperties(selectedImage);
+
+            return true;
+        }
+
+        return this.#formatTableCellSelection(command, value);
     }
 
     #formatTableCellSelection(command, value = null) {

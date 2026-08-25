@@ -230,7 +230,24 @@ export default class TextToolbar {
         this.#build();
 
         document.addEventListener('click', event => {
-            if (!this.element.contains(event.target)) {
+            const dropdown = event.target.closest?.(
+                '.vhd-toolbar-dropdown'
+            );
+
+            /*
+             * Keep a menu open only while the click occurs inside one of the
+             * toolbar dropdowns themselves. A click anywhere else — canvas,
+             * Properties, another normal toolbar control, etc. — closes all
+             * open menus.
+             *
+             * Dropdown triggers keep their own toggle logic and call
+             * #closeMenus() before opening, so switching directly from one
+             * dropdown to another remains deterministic.
+             */
+            if (
+                !(dropdown instanceof HTMLElement)
+                || !this.element.contains(dropdown)
+            ) {
                 this.#closeMenus();
             }
         });
@@ -1228,7 +1245,10 @@ export default class TextToolbar {
         const trigger = document.createElement('button');
         trigger.type = 'button';
         trigger.className = 'vhd-toolbar-button vhd-toolbar-dropdown-trigger';
-        trigger.innerHTML = `+<span class="vhd-toolbar-caret">▾</span>`;
+        trigger.innerHTML = `
+            <span class="vhd-custom-actions-trigger-main" aria-hidden="true">+</span>
+            <span class="vhd-custom-actions-trigger-caret" aria-hidden="true">▾</span>
+        `;
         trigger.title = this.t.toolbar.customActions;
         trigger.setAttribute('aria-label', this.t.toolbar.customActions);
         trigger.setAttribute('aria-haspopup', 'true');

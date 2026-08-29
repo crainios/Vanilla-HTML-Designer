@@ -46,6 +46,8 @@ export default {
         underline: 'Underline',
         strike: 'Strike',
         moreFormatting: 'More formatting',
+        lineHeight: 'Line height',
+        letterSpacing: 'Letter spacing',
         superscript: 'Superscript',
         subscript: 'Subscript',
         lists: 'Lists',

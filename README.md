@@ -1442,3 +1442,169 @@ instead of a dashed border.
 
 Since 0.6.110, the medium shadow applies to the complete editor zone/section,
 not to its internal columns. Column styling remains unchanged from 0.6.108.
+
+## Plugins
+
+VHD 0.7.0 introduces the first plugin infrastructure.
+
+```js
+const editor = new HtmlDesigner('#htmlDesigner', {
+    plugins: [
+        MyPlugin
+    ],
+
+    // customButtons remains available independently for
+    // webmaster/application-specific proprietary actions.
+    customButtons: []
+});
+```
+
+Plugins are reusable ES modules with `name`, `version`, optional `requires`,
+and `setup(vhd)`. See `docs/plugins.md` for the current API and examples.
+
+
+
+### Plugin blocks (0.7.1)
+
+Plugins can now register reusable content blocks through `vhd.registerBlock()`.
+Registered blocks use the normal VHD content menu and support editor rendering
+and public HTML serialization. See `docs/plugins.md`.
+
+
+### Declarative plugin properties (0.7.2)
+
+Plugin blocks may now describe standard Properties-panel fields through a
+`properties: []` schema. Supported types are `text`, `number`, `color`,
+`select` and `checkbox`. See `docs/plugins.md`.
+
+
+### Plugin HTML import (0.7.3)
+
+Plugin blocks can optionally define `canImport()` and `import()` hooks so their
+serialized HTML can be reconstructed when VHD loads existing HTML. See
+`docs/plugins.md`.
+
+
+### Grouped plugin properties (0.7.4)
+
+Plugin property schemas now support `textarea`, `url`, and UI-only
+`group` / `section` declarations for organizing more complex Properties panels.
+See `docs/plugins.md`.
+
+
+### Code inside Text content (0.7.5)
+
+Code is no longer a standalone VHD content block. Use the Code command in the
+text toolbar while editing a Text block.
+
+- With selected text, the selection becomes a semantic `<pre><code>` region.
+- Without a selection, an empty code region is inserted at the caret.
+- `Tab` inserts four spaces inside code.
+- `Ctrl+Enter` / `Cmd+Enter` returns to the paragraph after the code.
+
+This makes documents that alternate prose and source code much easier to edit
+inside a single Text content block.
+
+
+### Insert content anywhere (0.7.6)
+
+The content `+` menu is available at every boundary in a column: before the
+first content, between existing contents, and after the last content. New
+content is therefore inserted directly at the intended position.
+
+
+### Per-content insertion controls (0.7.7)
+
+Every content block has two explicit insertion controls:
+
+- an upper `+`, placed at the left of Move/Delete, inserts before the content;
+- a lower `+`, aligned to the right, inserts after the content.
+
+Empty columns keep a single standalone `+`.
+
+
+### Aligned upper insertion control (0.7.8)
+
+The upper content `+` is now rendered directly inside the same action row as
+Move and Delete, guaranteeing identical vertical alignment and control height.
+
+
+### Left-aligned insertion controls (0.7.9)
+
+Both insertion `+` controls are now aligned to the left of the content block.
+Move and Delete remain on the right side of the upper control row.
+
+
+### Bottom insertion alignment fix (0.7.10)
+
+The lower content `+` now occupies its own normal-flow line below the content
+and cannot overlap the editable area.
+
+
+### Single content insertion control (0.7.11)
+
+Each content block now has a single `+` in its upper action row. The button
+always inserts the new content immediately below the current content. The
+previous lower insertion control has been removed.
+
+
+### Right-side insert-above control (0.7.12)
+
+The content action row now groups the three controls on the right:
+
+```text
++  ⋮⋮  ×
+```
+
+The `+` inserts a new content block immediately above the current content.
+
+
+### Multi-line code conversion (0.7.13)
+
+When several lines are selected and converted to Code, VHD now preserves
+structural line breaks from paragraphs, divs, headings, list items and `<br>`
+elements instead of flattening the selection onto one line.
+
+
+### Contextual selection toolbar (0.7.14)
+
+Selecting text inside a Text content block displays a compact floating toolbar
+with four frequent actions: **H2**, **Bold**, **Code** and **Link**. The
+selection is preserved while an action is chosen, so the user does not need to
+return to the main toolbar for these common operations.
+
+
+### Stable contextual selection detection (0.7.16)
+
+Mouse selection is detected once when the pointer is released at document
+level. Keyboard selection remains detected from the active Text content. VHD
+no longer continuously monitors the browser selection with `selectionchange`.
+
+
+### Code toggle (0.7.17)
+
+The Code action behaves as a formatting toggle:
+
+- normal text → `<pre><code>`;
+- caret or selection inside code → normal paragraph text.
+
+When code is converted back to text, line breaks are preserved with `<br>`.
+
+
+### Text color responsibility (0.7.19)
+
+For native Text and Heading contents, text color is managed only through text
+formatting tools. The Properties panel is reserved for block presentation
+settings such as line height and letter spacing.
+
+
+### Selection typography (0.7.20–0.7.21)
+
+Line height and letter spacing are content-formatting actions rather than
+block-level Properties. Letter spacing is available in **Additional formatting**;
+Line height is grouped with the paragraph tools. The Lists menu uses a distinct
+visual example for each supported bullet, alphabetic, decimal and Roman style.
+
+- `lineHeight` changes the paragraph/list item/block touched by the selection.
+- `letterSpacing` changes only the selected text.
+- Both can be hidden through `disabledToolbarButtons`.

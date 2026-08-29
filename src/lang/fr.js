@@ -46,6 +46,8 @@ export default {
         underline: 'Souligné',
         strike: 'Barré',
         moreFormatting: 'Mise en forme complémentaire',
+        lineHeight: 'Interligne',
+        letterSpacing: 'Espacement',
         superscript: 'Exposant',
         subscript: 'Indice',
         lists: 'Listes',

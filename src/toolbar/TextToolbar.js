@@ -72,6 +72,27 @@ function listIcon(ordered = false) {
         `;
 }
 
+function listStyleIcon(styleType) {
+    const examples = {
+        disc: '●',
+        square: '■',
+        circle: '○',
+        decimal: '1 2 3',
+        'lower-alpha': 'a b c',
+        'upper-alpha': 'A B C',
+        'lower-roman': 'i ii iii',
+        'upper-roman': 'I II III'
+    };
+    const example = examples[styleType] || examples.disc;
+    const isBullet = ['disc', 'square', 'circle'].includes(styleType);
+
+    return `
+        <span class="vhd-list-style-example ${isBullet ? 'is-bullet' : ''}">
+            ${example}
+        </span>
+    `;
+}
+
 
 function historyIcon(direction) {
     const transform = direction === 'redo' ? 'scale(-1 1) translate(-18 0)' : '';
@@ -229,13 +250,13 @@ export default class TextToolbar {
 
         this.#build();
 
-        document.addEventListener('click', event => {
+        document.addEventListener('pointerdown', event => {
             const dropdown = event.target.closest?.(
                 '.vhd-toolbar-dropdown'
             );
 
             /*
-             * Keep a menu open only while the click occurs inside one of the
+             * Keep a menu open only while the pointer interaction occurs inside one of the
              * toolbar dropdowns themselves. A click anywhere else — canvas,
              * Properties, another normal toolbar control, etc. — closes all
              * open menus.
@@ -250,7 +271,13 @@ export default class TextToolbar {
             ) {
                 this.#closeMenus();
             }
-        });
+        }, true);
+
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                this.#closeMenus();
+            }
+        }, true);
 
         document.addEventListener('selectionchange', () => {
             const selection = window.getSelection();
@@ -402,6 +429,313 @@ export default class TextToolbar {
     }
 
 
+    #selectionTextNodeSegments(range) {
+        if (
+            !(range instanceof Range)
+            || !(this.activeEditable instanceof HTMLElement)
+            || range.collapsed
+        ) {
+            return [];
+        }
+
+        const walker = document.createTreeWalker(
+            this.activeEditable,
+            NodeFilter.SHOW_TEXT
+        );
+
+        const segments = [];
+        let node;
+
+        while ((node = walker.nextNode())) {
+            if (!node.nodeValue || !range.intersectsNode(node)) {
+                continue;
+            }
+
+            let start = 0;
+            let end = node.nodeValue.length;
+
+            if (node === range.startContainer) {
+                start = range.startOffset;
+            }
+
+            if (node === range.endContainer) {
+                end = range.endOffset;
+            }
+
+            if (start < end) {
+                segments.push({ node, start, end });
+            }
+        }
+
+        return segments;
+    }
+
+    #wrapTextSegment(node, start, end, property, value) {
+        if (
+            !(node instanceof Text)
+            || start < 0
+            || end > node.nodeValue.length
+            || start >= end
+        ) {
+            return;
+        }
+
+        let selectedNode = node;
+
+        if (end < selectedNode.nodeValue.length) {
+            selectedNode.splitText(end);
+        }
+
+        if (start > 0) {
+            selectedNode = selectedNode.splitText(start);
+        }
+
+        const parent = selectedNode.parentElement;
+
+        if (
+            parent instanceof HTMLSpanElement
+            && parent.childNodes.length === 1
+            && parent.firstChild === selectedNode
+        ) {
+            parent.style[property] = value;
+            return;
+        }
+
+        const span = document.createElement('span');
+        span.style[property] = value;
+        selectedNode.replaceWith(span);
+        span.append(selectedNode);
+    }
+
+    #applyLetterSpacing(value) {
+        if (!(this.activeEditable instanceof HTMLElement)) {
+            return false;
+        }
+
+        if (!this.#restoreSelection()) {
+            return false;
+        }
+
+        const selection = window.getSelection();
+
+        if (
+            !selection
+            || selection.rangeCount === 0
+            || selection.isCollapsed
+        ) {
+            return false;
+        }
+
+        const range = selection.getRangeAt(0);
+
+        if (!this.activeEditable.contains(range.commonAncestorContainer)) {
+            return false;
+        }
+
+        const spacing = Number(value);
+
+        if (!Number.isFinite(spacing)) {
+            return false;
+        }
+
+        const bookmark = this.#getTextSelectionBookmark();
+        const segments = this.#selectionTextNodeSegments(range);
+
+        /*
+         * Process from the end of the DOM selection backwards. Splitting a
+         * text node therefore cannot invalidate offsets collected for an
+         * earlier segment.
+         */
+        segments.reverse().forEach(({ node, start, end }) => {
+            this.#wrapTextSegment(
+                node,
+                start,
+                end,
+                'letterSpacing',
+                `${spacing}px`
+            );
+        });
+
+        this.activeEditable.normalize();
+
+        if (bookmark) {
+            this.#restoreTextSelectionBookmark(bookmark);
+        }
+
+        this.activeEditable.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: 'formatLetterSpacing',
+            data: String(spacing)
+        }));
+
+        this.#keepSelection(false);
+        return true;
+    }
+
+    #selectionLineHeightTargets(range) {
+        if (
+            !(range instanceof Range)
+            || !(this.activeEditable instanceof HTMLElement)
+        ) {
+            return [];
+        }
+
+        const blockSelector = [
+            'p',
+            'h1',
+            'h2',
+            'h3',
+            'h4',
+            'h5',
+            'h6',
+            'li',
+            'blockquote',
+            'pre',
+            'div'
+        ].join(',');
+
+        const targets = new Set();
+
+        if (range.collapsed) {
+            const node = range.startContainer;
+            const element = node.nodeType === Node.ELEMENT_NODE
+                ? node
+                : node.parentElement;
+            const block = element?.closest?.(blockSelector);
+
+            if (
+                block instanceof HTMLElement
+                && block !== this.activeEditable
+                && this.activeEditable.contains(block)
+            ) {
+                targets.add(block);
+            }
+
+            return Array.from(targets);
+        }
+
+        for (const { node } of this.#selectionTextNodeSegments(range)) {
+            const block = node.parentElement?.closest?.(blockSelector);
+
+            if (
+                block instanceof HTMLElement
+                && block !== this.activeEditable
+                && this.activeEditable.contains(block)
+            ) {
+                targets.add(block);
+            }
+        }
+
+        return Array.from(targets);
+    }
+
+    #applyLineHeight(value) {
+        if (!(this.activeEditable instanceof HTMLElement)) {
+            return false;
+        }
+
+        if (!this.#restoreSelection()) {
+            return false;
+        }
+
+        const selection = window.getSelection();
+
+        if (!selection || selection.rangeCount === 0) {
+            return false;
+        }
+
+        const range = selection.getRangeAt(0);
+
+        if (!this.activeEditable.contains(range.commonAncestorContainer)) {
+            return false;
+        }
+
+        const lineHeight = Number(value);
+
+        if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+            return false;
+        }
+
+        const bookmark = this.#getTextSelectionBookmark();
+        const targets = this.#selectionLineHeightTargets(range);
+
+        if (targets.length) {
+            targets.forEach(target => {
+                target.style.lineHeight = String(lineHeight);
+            });
+        } else {
+            /*
+             * Heading blocks use the heading itself as contenteditable, so
+             * styling that outer element would not be persisted in
+             * block.content. Wrap its inner content instead. The same fallback
+             * also covers legacy text content made only of direct text nodes.
+             */
+            const wrapper = document.createElement('span');
+            wrapper.style.lineHeight = String(lineHeight);
+
+            const fragment = document.createDocumentFragment();
+
+            while (this.activeEditable.firstChild) {
+                fragment.append(this.activeEditable.firstChild);
+            }
+
+            wrapper.append(fragment);
+            this.activeEditable.append(wrapper);
+        }
+
+        if (bookmark) {
+            this.#restoreTextSelectionBookmark(bookmark);
+        }
+
+        this.activeEditable.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: 'formatLineHeight',
+            data: String(lineHeight)
+        }));
+
+        this.#keepSelection(false);
+        return true;
+    }
+
+    #formattingSelectRow(label, values, onChange) {
+        const row = document.createElement('label');
+        row.className =
+            'vhd-toolbar-menu-item vhd-toolbar-formatting-select-item';
+
+        const text = document.createElement('span');
+        text.className = 'vhd-toolbar-formatting-select-label';
+        text.textContent = label;
+
+        const select = document.createElement('select');
+        select.className = 'vhd-toolbar-formatting-select';
+        select.setAttribute('aria-label', label);
+
+        values.forEach(([value, optionLabel]) => {
+            const option = document.createElement('option');
+            option.value = String(value);
+            option.textContent = optionLabel;
+            select.append(option);
+        });
+
+        select.addEventListener('mousedown', () => {
+            this.#saveSelection();
+        });
+
+        select.addEventListener('click', event => {
+            event.stopPropagation();
+        });
+
+        select.addEventListener('change', event => {
+            event.stopPropagation();
+            onChange(select.value);
+            this.#closeMenus();
+        });
+
+        row.append(text, select);
+        return row;
+    }
+
+
     #additionalFormattingDropdown(colorControl, backgroundColorControl) {
         const wrapper = document.createElement('div');
         wrapper.className = 'vhd-toolbar-dropdown';
@@ -496,8 +830,46 @@ export default class TextToolbar {
 
             const text = document.createElement('span');
             text.textContent = label;
+            text.className = 'vhd-toolbar-menu-color-label';
 
             control.classList.add('vhd-toolbar-color-control-menu');
+
+            const colorInput = control.querySelector('input[type="color"]');
+
+            const openColorPicker = event => {
+                if (!(colorInput instanceof HTMLInputElement)) {
+                    return;
+                }
+
+                /*
+                 * The actual color input remains the source of truth, but the
+                 * whole menu row is an activation target. Preserve the text
+                 * selection before opening the native picker.
+                 */
+                this.#saveSelection();
+                event?.preventDefault?.();
+
+                try {
+                    if (typeof colorInput.showPicker === 'function') {
+                        colorInput.showPicker();
+                    } else {
+                        colorInput.click();
+                    }
+                } catch {
+                    colorInput.click();
+                }
+            };
+
+            row.addEventListener('mousedown', event => {
+                if (
+                    event.target === colorInput
+                    || control.contains(event.target)
+                ) {
+                    return;
+                }
+
+                openColorPicker(event);
+            });
 
             row.append(icon, text, control);
             menu.append(row);
@@ -505,6 +877,22 @@ export default class TextToolbar {
 
         addColor('textColor', this.t.toolbar.color, colorControl);
         addColor('backgroundColor', this.t.toolbar.backgroundColor, backgroundColorControl);
+
+        if (!this.disabledToolbarButtons.has('letterSpacing')) {
+            menu.append(
+                this.#formattingSelectRow(
+                    this.t.toolbar.letterSpacing,
+                    [
+                        ['0', '0 px'],
+                        ['0.5', '0.5 px'],
+                        ['1', '1 px'],
+                        ['2', '2 px'],
+                        ['3', '3 px']
+                    ],
+                    value => this.#applyLetterSpacing(value)
+                )
+            );
+        }
 
         trigger.addEventListener('mousedown', event => {
             this.#saveSelection();
@@ -526,6 +914,18 @@ export default class TextToolbar {
         }
 
         return wrapper;
+    }
+
+    #lineHeightDropdown() {
+        return this.#dropdown(
+            this.t.toolbar.lineHeight,
+            '<span class="vhd-toolbar-line-height-icon">A↕</span>',
+            ['1', '1.15', '1.25', '1.5', '1.75', '2'].map(value => ({
+                label: value,
+                icon: `<span style="line-height:${value}">A≡</span>`,
+                action: () => this.#applyLineHeight(value)
+            }))
+        );
     }
 
 
@@ -589,6 +989,78 @@ export default class TextToolbar {
 
         wrapper.append(trigger, menu);
         return wrapper;
+    }
+
+
+    registerPluginButton(definition, context = {}) {
+        if (!definition || typeof definition !== 'object') {
+            throw new TypeError(
+                'Vanilla HTML Designer: toolbar button definition must be an object.'
+            );
+        }
+
+        const id = String(definition.id ?? '').trim();
+        const label = String(definition.label ?? '').trim();
+
+        if (!id || !label || typeof definition.action !== 'function') {
+            throw new Error(
+                'Vanilla HTML Designer: plugin toolbar button requires id, label and action.'
+            );
+        }
+
+        const fullId = `${context.plugin || 'plugin'}:${id}`;
+
+        if (
+            this.element.querySelector(
+                `[data-vhd-plugin-toolbar-id="${CSS.escape(fullId)}"]`
+            )
+        ) {
+            throw new Error(
+                `Vanilla HTML Designer: toolbar button "${fullId}" already exists.`
+            );
+        }
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'vhd-toolbar-button vhd-plugin-toolbar-button';
+        button.dataset.vhdPluginToolbarId = fullId;
+        button.title = label;
+        button.setAttribute('aria-label', label);
+
+        if (definition.icon) {
+            button.innerHTML = String(definition.icon);
+        } else {
+            button.textContent = String(definition.text ?? label.slice(0, 1));
+        }
+
+        button.addEventListener('mousedown', event => {
+            this.#saveSelection();
+            event.preventDefault();
+        });
+
+        button.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.#closeMenus();
+
+            definition.action({
+                editable: this.activeEditable
+            });
+        });
+
+        const customActions = this.element.querySelector(
+            '[data-vhd-toolbar-key="customActions"]'
+        );
+
+        if (customActions) {
+            this.element.insertBefore(button, customActions);
+        } else {
+            this.element.append(button);
+        }
+
+        this.#cleanupToolbarSeparators();
+
+        return button;
     }
 
     #closeMenus() {
@@ -1812,48 +2284,50 @@ export default class TextToolbar {
             backgroundColorControl
         );
 
+        const lineHeight = this.#lineHeightDropdown();
+
         const lists = this.#dropdown(
             this.t.toolbar.lists,
             listIcon(false),
             [
                 {
                     label: this.t.toolbar.unorderedDisc,
-                    icon: listIcon(false),
+                    icon: listStyleIcon('disc'),
                     action: () => this.#applyList(false, 'disc')
                 },
                 {
                     label: this.t.toolbar.unorderedSquare,
-                    icon: listIcon(false),
+                    icon: listStyleIcon('square'),
                     action: () => this.#applyList(false, 'square')
                 },
                 {
                     label: this.t.toolbar.unorderedCircle,
-                    icon: listIcon(false),
+                    icon: listStyleIcon('circle'),
                     action: () => this.#applyList(false, 'circle')
                 },
                 {
                     label: this.t.toolbar.orderedDecimal,
-                    icon: listIcon(true),
+                    icon: listStyleIcon('decimal'),
                     action: () => this.#applyList(true, 'decimal')
                 },
                 {
                     label: this.t.toolbar.orderedLowerAlpha,
-                    icon: listIcon(true),
+                    icon: listStyleIcon('lower-alpha'),
                     action: () => this.#applyList(true, 'lower-alpha')
                 },
                 {
                     label: this.t.toolbar.orderedUpperAlpha,
-                    icon: listIcon(true),
+                    icon: listStyleIcon('upper-alpha'),
                     action: () => this.#applyList(true, 'upper-alpha')
                 },
                 {
                     label: this.t.toolbar.orderedLowerRoman,
-                    icon: listIcon(true),
+                    icon: listStyleIcon('lower-roman'),
                     action: () => this.#applyList(true, 'lower-roman')
                 },
                 {
                     label: this.t.toolbar.orderedUpperRoman,
-                    icon: listIcon(true),
+                    icon: listStyleIcon('upper-roman'),
                     action: () => this.#applyList(true, 'upper-roman')
                 }
             ],
@@ -2006,6 +2480,7 @@ export default class TextToolbar {
 
             // Paragraph formatting
             this.#toolbarItem('paragraph', format),
+            this.#toolbarItem('lineHeight', lineHeight),
             this.#toolbarItem('lists', lists),
             this.#toolbarItem('quote', this.quoteButton),
             this.#toolbarItem('alignment', alignment),

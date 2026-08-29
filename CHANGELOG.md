@@ -1,3 +1,313 @@
+## [0.7.22] - 2026-08-29
+
+### Changed
+
+- New Text blocks are now empty instead of containing the default `Text` label.
+- Empty editors and newly created zones/columns still receive their default Text block.
+
+## [0.7.21] - 2026-08-27
+
+### Changed
+
+- Renamed the French toolbar label `Espacement des lettres` to `Espacement`.
+- Moved Line height out of Additional formatting and into the paragraph-formatting group.
+- Added a simple marker example for every list style: filled circle, square,
+  hollow circle, `1 2 3`, `a b c`, `A B C`, `i ii iii` and `I II III`.
+- Preserved the existing selection-scoped behavior for Line height and Letter spacing.
+- All toolbar dropdowns now close consistently with Escape or a pointer
+  interaction outside the menu, including clicks intercepted by the editor.
+- Inline-image Properties now include Alternative text and Border radius;
+  both values are persisted directly on the image HTML.
+
+## [0.7.20] - 2026-08-27
+
+### Changed
+
+- Removed Line height and Letter spacing from the Properties panel of native Text and Heading blocks.
+- These typography controls now live in the Additional formatting toolbar menu.
+- Letter spacing applies only to the current text selection and is persisted as inline `<span style="letter-spacing:...">` formatting.
+- Line height applies to the paragraph/list item/block elements touched by the selection and is persisted in the block HTML.
+- When a Heading block or direct text has no inner paragraph element, VHD persists line height through an inner span instead of a non-persisted editor-only outer style.
+- Native Text and Heading block defaults and HTML serialization no longer emit global line-height or letter-spacing styles.
+- `disabledToolbarButtons` now accepts `lineHeight` and `letterSpacing`.
+
+## [0.7.19] - 2026-08-27
+
+### Changed
+
+- Removed the global text-color property from native Text and Heading blocks.
+- Text color is now exclusively a content-formatting concern handled by the main toolbar/contextual formatting.
+- The Properties panel for Text and Heading now keeps presentation-only settings such as line height and letter spacing.
+- Native Text and Heading block factories no longer create a `properties.color` value.
+- Text/Heading editor rendering and HTML serialization no longer apply a block-level `color` style.
+- Legacy JSON documents may still contain `properties.color`, but VHD 0.7.19 intentionally ignores it for Text and Heading blocks.
+
+## [0.7.18] - 2026-08-27
+
+### Fixed
+
+- The two color entries in the additional-formatting menu are now fully clickable.
+- Clicking the label `Text color` / `Background color`, the row area, or the color control opens the native color picker.
+- The current text selection is preserved before opening the picker so formatting still applies to the selected text.
+- Added a pointer cursor to make the larger activation area explicit.
+
+## [0.7.17] - 2026-08-26
+
+### Changed
+
+- The Code action is now a true toggle.
+- Applying Code to normal text still converts the selection to an embedded `<pre class="vhd-code"><code>...</code></pre>`.
+- Applying Code while the selection or caret is inside an existing code region converts that entire code region back to normal paragraph text.
+- Line breaks in code are preserved as `<br>` elements when converting back to text.
+- The contextual selection menu can now remain available inside code regions so the Code action can toggle them back to text.
+
+## [0.7.16] - 2026-08-26
+
+### Fixed
+
+- Removed the global `selectionchange` listener introduced in 0.7.15 because it could interfere with repeated editing and selection interactions.
+- Mouse selection detection now runs once on document `pointerup`, after the user has finished the selection gesture.
+- Left-to-right and right-to-left mouse selections use the same document-level detection path.
+- Keyboard selection detection remains local to Text contents via `keyup`.
+- Removed the persistent contextual-menu pointer guard that could remain stuck after an action hid the menu before `pointerup`.
+- The larger contextual-menu presentation from 0.7.15 is retained.
+
+## [0.7.15] - 2026-08-26
+
+### Fixed
+
+- Fixed contextual toolbar detection for mouse selections made left-to-right or right-to-left.
+- Selection detection now listens to the browser `selectionchange` event rather than relying on the editable element's `mouseup`.
+- Added pointer-state protection so interacting with the contextual toolbar does not immediately dismiss it.
+
+### UI
+
+- Enlarged the contextual toolbar and its H2, Bold, Code and Link buttons.
+- Increased spacing, hover contrast and shadow for stronger visual presence.
+
+## [0.7.14] - 2026-08-26
+
+### Added
+
+- Added a compact contextual toolbar when text is selected inside a Text content block.
+- Quick actions: H2, Bold, Code and Link.
+- The contextual toolbar is positioned above the selection, or below it when there is not enough viewport space.
+- Mouse and keyboard selections are supported.
+- The selection range is preserved while clicking contextual actions.
+- Code uses the existing embedded `<pre><code>` conversion, including multi-line preservation from 0.7.13.
+- The menu is intentionally limited to Text blocks and does not appear in tables, headings or existing code regions.
+
+## [0.7.13] - 2026-08-26
+
+### Fixed
+
+- Fixed conversion of multi-line text selections to embedded code.
+- Code conversion now preserves line breaks across paragraphs, divs, headings, list items and other block-level elements.
+- `<br>` elements are converted to `\n`.
+- Existing indentation and text-node whitespace are preserved.
+- Excess structural blank lines are normalized without flattening the selected code into one line.
+
+## [0.7.12] - 2026-08-26
+
+### Changed
+
+- Moved the single content insertion `+` to the right-side action group.
+- The content action row is now ordered `+`, Move, Delete.
+- Clicking `+` now inserts the new content immediately above the current content.
+- This behavior matches the visual position of the control and the existing section-management pattern.
+- Empty columns still retain one standalone `+` for inserting their first content.
+
+## [0.7.11] - 2026-08-26
+
+### Changed
+
+- Simplified content insertion to one `+` control per content block.
+- Removed the lower insertion control completely.
+- The remaining `+` stays in the upper action row, aligned left of Move and Delete.
+- Clicking `+` now inserts the new content immediately below the current content.
+- Empty columns still retain one standalone `+` for their first content.
+
+## [0.7.10] - 2026-08-26
+
+### Fixed
+
+- Fixed the lower content insertion `+` overlapping the edited content area.
+- The lower insertion controls now remain in normal document flow below the content.
+- Added explicit clearing to prevent floated or inline content from pulling the lower action row upward.
+- Lower insertion remains left-aligned.
+
+## [0.7.9] - 2026-08-26
+
+### Changed
+
+- Aligned the lower content insertion `+` to the left.
+- Both upper and lower insertion controls now use the same left alignment.
+- Move and Delete remain grouped on the right of the upper action row.
+- The lower insertion menu now opens from the left edge of its control.
+
+## [0.7.8] - 2026-08-26
+
+### Fixed
+
+- Corrected the vertical alignment of the upper content insertion `+`.
+- The upper `+` is now a true control in the same action row as Move and Delete instead of reusing the generic insertion-zone layout.
+- Upper `+`, Move and Delete now share the same 26px control height and flex alignment.
+- The upper insertion menu remains anchored directly below the `+`.
+- The lower `+` remains in the separate bottom action row aligned to the right.
+
+## [0.7.7] - 2026-08-26
+
+### Changed
+
+- Reworked content insertion controls introduced in 0.7.6.
+- Each content block now owns an explicit `+` above and below.
+- The upper `+` is integrated into the block's top action row, at the left of the Move and Delete controls.
+- The lower `+` is placed in a symmetrical bottom action row and aligned to the right.
+- Empty columns retain one standalone insertion control.
+- Exact insertion indexes from 0.7.6 are preserved.
+
+### UI
+
+- Top insertion means "insert before this content".
+- Bottom insertion means "insert after this content".
+- The two insertion actions are visually attached to the content they affect rather than floating between blocks.
+
+## [0.7.6] - 2026-08-26
+
+### Changed
+
+- Content can now be inserted at any position inside a column instead of only at the end.
+- Added one `+` insertion point at every content boundary: before the first block, between each pair of blocks and after the last block.
+- A boundary point between two blocks acts both as "insert below" the previous content and "insert above" the following content.
+- `addBlock()` now accepts an optional exact insertion index.
+- `block:add` event data now includes the resulting `blockIndex`.
+- Empty columns keep a single insertion point at index 0.
+
+### UI
+
+- Insertion points remain compact and appear when the column is active/hovered.
+- Mobile keeps insertion points visible for direct access.
+
+## [0.7.5] - 2026-08-26
+
+### Changed
+
+- Removed the standalone native `Code` content block.
+- The toolbar Code command now inserts semantic `<pre class="vhd-code"><code>...</code></pre>` directly inside an active Text block.
+- Selected text is converted directly into a code region; without a selection, an empty code region is inserted at the caret.
+- A normal paragraph is automatically kept after an inserted code region so writing can continue in the same Text block.
+- `Tab` inside code inserts four spaces.
+- `Ctrl+Enter` / `Cmd+Enter` exits the code region and moves the caret to the following paragraph.
+- Search, statistics, HTML serialization and HTML import now naturally process embedded code as part of Text content.
+
+### Removed
+
+- Removed the obsolete `CodeBlock` factory registration and standalone code editor.
+- Removed the code insertion dialog.
+- Removed standalone Code serialization/import handling.
+- No backward compatibility is provided for old JSON documents containing `type: "code"`.
+
+## [0.7.4] - 2026-08-25
+
+### Added
+
+- Added `textarea` declarative plugin property fields.
+- Added `url` declarative plugin property fields.
+- Added `group` / `section` declarations for structuring plugin Properties panels.
+- Added optional group descriptions.
+- Added recursive grouped property schema handling.
+- Added `rows` support for plugin textarea fields.
+
+### Architecture
+
+- Property groups are UI-only and do not persist grouping metadata in block data.
+- Individual properties remain independently stored and updated.
+- Existing 0.7.2 flat property schemas remain fully supported.
+- Native Properties handling and `customButtons` remain unchanged.
+
+## [0.7.3] - 2026-08-25
+
+### Added
+
+- Added plugin HTML import hooks through `canImport(element)` and `import(element)`.
+- Plugin blocks can now complete the `JSON -> editor -> HTML -> import HTML -> JSON` round trip.
+- Plugin import hooks receive sanitized cloned DOM elements.
+- VHD enforces the registered block type on imported plugin block objects.
+- Added importer error isolation for plugin `canImport()` / `import()` failures.
+- `editor.getRegisteredBlocks()` now reports whether a plugin block is importable.
+
+### Architecture
+
+- Plugin import recognition runs before native block recognition.
+- Native HTML import behavior remains unchanged when no plugin claims an element.
+- Plugin import hooks are optional; blocks without them remain usable but cannot be reconstructed from HTML.
+
+## [0.7.2] - 2026-08-25
+
+### Added
+
+- Added declarative property schemas for plugin blocks.
+- Supported plugin property field types: `text`, `number`, `color`, `select`, `checkbox`.
+- Added direct block keys such as `content` and nested `properties.*` keys.
+- Added field options `default`, `placeholder`, `min`, `max`, `step`, `options`, `live` and `render`.
+- Plugin property changes emit `change` events with source `plugin:property`.
+- Plugin properties are rendered inside the existing VHD Properties panel.
+
+### Architecture
+
+- Plugins declare property metadata only; VHD owns the Properties panel UI.
+- Plugins do not receive direct access to internal Editor state or DOM.
+- Existing native property handling is unchanged.
+- `customButtons` remains independent from the plugin system.
+
+## [0.7.1] - 2026-08-25
+
+### Added
+
+- Added the first shared native/plugin block registry through `BlockFactory`.
+- Added plugin API `vhd.registerBlock()`.
+- Added public `editor.registerBlock()` bridge and `editor.getRegisteredBlocks()`.
+- Plugin blocks now appear automatically in the normal VHD `+` content menu.
+- Added optional plugin block menu icons.
+- Added plugin block editor rendering through `render({ block, update, render })`.
+- Added plugin block HTML serialization through `serialize({ block })`.
+- Added `block:registered` event.
+- Plugin block types participate in `disabledContentBlocks`.
+
+### Architecture
+
+- Native and third-party block types now use one central registry.
+- Native blocks keep their existing rendering and serialization paths, limiting regression risk.
+- Duplicate block types are rejected, including attempts to replace native VHD blocks.
+- Plugins receive cloned block data plus controlled `update()` / `render()` callbacks instead of direct access to VHD project internals.
+
+### Not yet included
+
+- Declarative plugin property panels.
+- Plugin HTML importer hooks.
+- Plugin-specific search/statistics integration.
+
+## [0.7.0] - 2026-08-25
+
+### Added
+
+- Introduced the first official Vanilla HTML Designer plugin infrastructure.
+- Added `plugins: []` constructor option.
+- Added dynamic `editor.use(plugin)` loading.
+- Added `PluginManager` with plugin validation, duplicate-name protection and initial `requires` compatibility checks.
+- Added a restricted plugin API instead of exposing VHD's internal `Editor`.
+- Added `EventBus` with `on()` / `off()` and the initial `ready`, `change`, `block:add`, `block:remove`, `block:select` and `plugin:loaded` events.
+- Added `registerToolbarButton()` for reusable plugin toolbar actions.
+- Added `editor.getPlugins()` metadata listing.
+- Added `docs/plugins.md`.
+- Kept `customButtons` unchanged as the lightweight integration mechanism for webmaster/application-specific proprietary actions.
+
+### Architecture
+
+- Plugin code is loaded as standard ES modules.
+- Plugins do not receive direct access to VHD's internal project or DOM structures.
+- This release intentionally does not yet implement third-party block registration, plugin property schemas or serializer/importer extensions; those are planned for later 0.7.x releases.
+
 # Changelog
 
 All notable changes to Vanilla HTML Designer will be documented in this file.

@@ -212,16 +212,6 @@ function createSpacerBlock(element) {
     return block;
 }
 
-function createCodeBlock(element) {
-    const block = BlockFactory.create('code');
-    const code = element.querySelector('code');
-
-    block.code = ((code || element).textContent || '')
-        .replaceAll('\r\n', '\n')
-        .replaceAll('\r', '\n');
-
-    return block;
-}
 
 function createButtonBlock(element) {
     const link = element.matches('a.vhd-button')
@@ -494,6 +484,63 @@ function isWhitespaceText(node) {
     return node.nodeType === Node.TEXT_NODE && !node.textContent.trim();
 }
 
+function tryImportPluginBlock(element) {
+    for (const type of BlockFactory.pluginTypes) {
+        const definition = BlockFactory.get(type);
+
+        if (
+            !definition?.canImport
+            || !definition?.importer
+        ) {
+            continue;
+        }
+
+        let matches = false;
+
+        try {
+            matches = Boolean(
+                definition.canImport(element.cloneNode(true))
+            );
+        } catch (error) {
+            console.error(
+                `Vanilla HTML Designer: plugin block "${type}" canImport() failed.`,
+                error
+            );
+            continue;
+        }
+
+        if (!matches) {
+            continue;
+        }
+
+        try {
+            const imported = definition.importer(
+                element.cloneNode(true)
+            );
+
+            if (!imported || typeof imported !== 'object') {
+                console.warn(
+                    `Vanilla HTML Designer: plugin block "${type}" import() must return an object.`
+                );
+                return null;
+            }
+
+            const block = structuredClone(imported);
+            block.type = type;
+
+            return block;
+        } catch (error) {
+            console.error(
+                `Vanilla HTML Designer: plugin block "${type}" import() failed.`,
+                error
+            );
+            return null;
+        }
+    }
+
+    return null;
+}
+
 function nodesToBlocks(nodes) {
     const blocks = [];
     let textBuffer = [];
@@ -531,6 +578,14 @@ function nodesToBlocks(nodes) {
         const element = node;
         const tag = element.tagName.toLowerCase();
 
+        const pluginBlock = tryImportPluginBlock(element);
+
+        if (pluginBlock) {
+            flushText();
+            blocks.push(pluginBlock);
+            continue;
+        }
+
         if (/^h[1-6]$/.test(tag)) {
             flushText();
             blocks.push(createHeadingBlock(element));
@@ -565,12 +620,6 @@ function nodesToBlocks(nodes) {
         if (tag === 'hr' || element.classList.contains('vhd-divider')) {
             flushText();
             blocks.push(createDividerBlock(element));
-            continue;
-        }
-
-        if (tag === 'pre' && element.classList.contains('vhd-code')) {
-            flushText();
-            blocks.push(createCodeBlock(element));
             continue;
         }
 

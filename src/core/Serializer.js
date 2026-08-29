@@ -1,3 +1,5 @@
+import BlockFactory from '../blocks/BlockFactory.js';
+
 function escapeAttribute(value = '') {
     return String(value)
         .replaceAll('&', '&amp;')
@@ -13,13 +15,6 @@ function escapeText(value = '') {
         .replaceAll('>', '&gt;');
 }
 
-function escapeCode(value = '') {
-    return escapeText(
-        String(value)
-            .replaceAll('\r\n', '\n')
-            .replaceAll('\r', '\n')
-    ).replaceAll('\n', '&#10;');
-}
 
 function cleanTableCellContent(value = '') {
     return String(value)
@@ -30,37 +25,31 @@ function cleanTableCellContent(value = '') {
 }
 
 function serializeBlock(block) {
+    const definition = BlockFactory.get(block?.type);
+
+    if (definition && !definition.native) {
+        const html = definition.serialize({
+            block: structuredClone(block)
+        });
+
+        if (typeof html !== 'string') {
+            console.warn(
+                `Vanilla HTML Designer: plugin block "${block.type}" serialize() must return a string.`
+            );
+            return '';
+        }
+
+        return html;
+    }
+
     switch (block.type) {
         case 'heading': {
             const level = Math.min(6, Math.max(1, Number(block.level) || 2));
-            const properties = block.properties ?? {};
-            const color = properties.color || '#1f2937';
-            const lineHeight = Number(properties.lineHeight ?? 1.2);
-            const letterSpacing = Number(properties.letterSpacing ?? 0);
-
-            const style = [
-                `color:${escapeAttribute(color)}`,
-                `line-height:${Number.isFinite(lineHeight) ? lineHeight : 1.2}`,
-                `letter-spacing:${Number.isFinite(letterSpacing) ? letterSpacing : 0}px`
-            ].join(';');
-
-            return `<h${level} style="${style}">${block.content ?? ''}</h${level}>`;
+            return `<h${level}>${block.content ?? ''}</h${level}>`;
         }
 
-        case 'text': {
-            const properties = block.properties ?? {};
-            const color = properties.color || '#1f2937';
-            const lineHeight = Number(properties.lineHeight ?? 1.5);
-            const letterSpacing = Number(properties.letterSpacing ?? 0);
-
-            const style = [
-                `color:${escapeAttribute(color)}`,
-                `line-height:${Number.isFinite(lineHeight) ? lineHeight : 1.5}`,
-                `letter-spacing:${Number.isFinite(letterSpacing) ? letterSpacing : 0}px`
-            ].join(';');
-
-            return `<div class="vhd-text" style="${style}">${block.content ?? ''}</div>`;
-        }
+        case 'text':
+            return `<div class="vhd-text">${block.content ?? ''}</div>`;
 
         case 'image': {
             if (!block.src) {
@@ -294,9 +283,6 @@ function serializeBlock(block) {
             const height = Math.max(0, Math.min(500, Number(block.height) || 0));
             return `<div class="vhd-spacer" style="height:${height}px" aria-hidden="true"></div>`;
         }
-
-        case 'code':
-            return `<pre class="vhd-code"><code>${escapeCode(block.code ?? '')}</code></pre>`;
 
         default:
             return '';

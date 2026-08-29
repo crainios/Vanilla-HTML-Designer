@@ -1,5 +1,9 @@
 import Editor from './core/Editor.js';
 import Serializer from './core/Serializer.js';
+import BlockFactory from './blocks/BlockFactory.js';
+import EventBus from './core/EventBus.js';
+import PluginManager from './core/PluginManager.js';
+import { VERSION } from './version.js';
 import en from './lang/en.js';
 
 export default class HtmlDesigner {
@@ -38,10 +42,75 @@ export default class HtmlDesigner {
             throw new Error('Vanilla HTML Designer: target element not found.');
         }
 
+        this.events = new EventBus();
+
         this.editor = new Editor(root, {
             ...options,
-            publicApi: this
+            publicApi: this,
+            emitEvent: (event, detail) => this.events.emit(event, detail)
         }, en);
+
+        this.plugins = new PluginManager(this, VERSION);
+
+        for (const plugin of options.plugins ?? []) {
+            this.use(plugin);
+        }
+
+        queueMicrotask(() => {
+            this.events.emit('ready', {
+                version: VERSION,
+                plugins: this.getPlugins()
+            });
+        });
+    }
+
+    _emitPluginEvent(event, detail = {}) {
+        this.events.emit(event, detail);
+    }
+
+    on(event, callback) {
+        return this.events.on(event, callback);
+    }
+
+    off(event, callback) {
+        return this.events.off(event, callback);
+    }
+
+    use(plugin) {
+        return this.plugins.use(plugin);
+    }
+
+    getPlugins() {
+        return this.plugins.list();
+    }
+
+    registerToolbarButton(definition) {
+        const plugin = String(definition?.plugin ?? 'host');
+
+        return this.editor.registerToolbarButton(
+            definition,
+            { plugin }
+        );
+    }
+
+    registerBlock(definition) {
+        const plugin = String(definition?.plugin ?? 'host');
+        const registered = BlockFactory.register(
+            definition,
+            plugin
+        );
+
+        this.editor.refreshBlockRegistry();
+
+        this.events.emit('block:registered', {
+            ...registered
+        });
+
+        return registered;
+    }
+
+    getRegisteredBlocks() {
+        return BlockFactory.registered;
     }
 
     setStatus(message = '', type = 'info') {

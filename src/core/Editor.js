@@ -26,6 +26,10 @@ function deepMerge(base, override) {
 }
 
 export default class Editor {
+    #emit(event, detail = {}) {
+        this.options?.emitEvent?.(event, detail);
+    }
+
     #populateRowWithDefaultText(row) {
         row.columns.forEach(column => {
             if (!column.blocks.length) {
@@ -92,6 +96,52 @@ export default class Editor {
             }
         };
 
+        this.selectionMenuPointerDown = false;
+
+        this.selectionPointerUpHandler = event => {
+            if (
+                this.selectionMenu instanceof HTMLElement
+                && this.selectionMenu.contains(event.target)
+            ) {
+                return;
+            }
+
+            requestAnimationFrame(() => {
+                const selection = window.getSelection();
+
+                if (
+                    !selection
+                    || selection.rangeCount === 0
+                    || selection.isCollapsed
+                ) {
+                    this.#hideSelectionMenu();
+                    return;
+                }
+
+                const range = selection.getRangeAt(0);
+                const common = range.commonAncestorContainer;
+                const commonElement = common.nodeType === Node.ELEMENT_NODE
+                    ? common
+                    : common.parentElement;
+                const editable = commonElement?.closest?.('.vhd-editable-text');
+
+                if (
+                    !(editable instanceof HTMLElement)
+                    || !this.root.contains(editable)
+                ) {
+                    this.#hideSelectionMenu();
+                    return;
+                }
+
+                this.#showSelectionMenu(editable);
+            });
+        };
+
+        document.addEventListener(
+            'pointerup',
+            this.selectionPointerUpHandler
+        );
+
         this.textToolbar = new TextToolbar(this.t, {
             defaultFontFamily: this.options.defaultFontFamily,
             customButtons: this.options.customButtons ?? [],
@@ -108,11 +158,20 @@ export default class Editor {
                 this.#formatContextualSelection(command, value),
             insertInlineImage: editable => this.#insertInlineImage(editable),
             insertVideo: editable => this.#insertVideo(editable),
-            insertCode: editable => this.#showInsertCodeDialog(editable)
+            insertCode: editable => this.#insertInlineCode(editable)
         });
 
         this.#buildShell();
         this.render();
+    }
+
+    registerToolbarButton(definition, context = {}) {
+        return this.textToolbar.registerPluginButton(definition, context);
+    }
+
+    refreshBlockRegistry() {
+        this.render();
+        return BlockFactory.registered;
     }
 
     setStatus(message = '', type = 'info') {
@@ -212,6 +271,7 @@ export default class Editor {
         imageElement.dataset.align = 'left';
         imageElement.dataset.size = '33';
         imageElement.dataset.spacing = '12';
+        imageElement.dataset.borderRadius = '0';
         imageElement.style.width = '33%';
         this.#applyInlineImageStyles(imageElement);
 
@@ -250,106 +310,299 @@ export default class Editor {
         this.#closeImageGallery();
     }
 
-    #showInsertCodeDialog(editable) {
-        const blockElement = editable?.closest?.('.vhd-block');
-        const rowIndex = Number(blockElement?.dataset.rowIndex);
-        const columnIndex = Number(blockElement?.dataset.columnIndex);
-        const blockIndex = Number(blockElement?.dataset.blockIndex);
-
-        this.pendingCodePosition = (
-            Number.isInteger(rowIndex)
-            && Number.isInteger(columnIndex)
-            && Number.isInteger(blockIndex)
-        )
-            ? { rowIndex, columnIndex, blockIndex: blockIndex + 1 }
-            : null;
-
-        if (!this.codeDialog) {
-            this.codeDialog = document.createElement('dialog');
-            this.codeDialog.className = 'vhd-code-dialog';
-
-            const form = document.createElement('form');
-            form.method = 'dialog';
-            form.className = 'vhd-code-dialog-content';
-
-            const title = document.createElement('h2');
-            title.textContent = this.t.editor.insertCodeTitle;
-
-            this.codeTextarea = document.createElement('textarea');
-            this.codeTextarea.className = 'vhd-code-dialog-textarea';
-            this.codeTextarea.rows = 14;
-            this.codeTextarea.spellcheck = false;
-            this.codeTextarea.placeholder = this.t.editor.codePlaceholder;
-
-            const actions = document.createElement('div');
-            actions.className = 'vhd-code-dialog-actions';
-
-            const cancel = document.createElement('button');
-            cancel.type = 'button';
-            cancel.className = 'vhd-secondary-button';
-            cancel.textContent = this.t.editor.cancel;
-            cancel.addEventListener('click', () => this.codeDialog.close());
-
-            const insert = document.createElement('button');
-            insert.type = 'button';
-            insert.className = 'vhd-action-button';
-            insert.textContent = this.t.editor.insert;
-            insert.addEventListener('click', () => {
-                const code = this.codeTextarea.value;
-
-                if (!code.length) {
-                    this.codeTextarea.focus();
-                    return;
-                }
-
-                this.#remember();
-
-                let position = this.pendingCodePosition;
-
-                if (!position) {
-                    const fallbackRowIndex = 0;
-                    const fallbackColumnIndex = 0;
-                    const blocks = this.project.rows?.[fallbackRowIndex]?.columns?.[fallbackColumnIndex]?.blocks;
-
-                    if (!blocks) {
-                        return;
-                    }
-
-                    position = {
-                        rowIndex: fallbackRowIndex,
-                        columnIndex: fallbackColumnIndex,
-                        blockIndex: blocks.length
-                    };
-                }
-
-                const block = BlockFactory.create('code');
-                block.code = code;
-
-                this.project.rows[position.rowIndex]
-                    .columns[position.columnIndex]
-                    .blocks.splice(position.blockIndex, 0, block);
-
-                this.codeDialog.close();
-                this.codeTextarea.value = '';
-                this.pendingCodePosition = null;
-                this.render();
-            });
-
-            actions.append(cancel, insert);
-            form.append(title, this.codeTextarea, actions);
-            this.codeDialog.append(form);
-            document.body.append(this.codeDialog);
-
-            this.codeDialog.addEventListener('click', event => {
-                if (event.target === this.codeDialog) {
-                    this.codeDialog.close();
-                }
-            });
+    #rangeToPlainText(range) {
+        if (!(range instanceof Range)) {
+            return '';
         }
 
-        this.codeTextarea.value = '';
-        this.codeDialog.showModal();
-        requestAnimationFrame(() => this.codeTextarea.focus());
+        const fragment = range.cloneContents();
+        const container = document.createElement('div');
+        container.append(fragment);
+
+        const blockTags = new Set([
+            'ADDRESS',
+            'ARTICLE',
+            'ASIDE',
+            'BLOCKQUOTE',
+            'DIV',
+            'DL',
+            'DT',
+            'DD',
+            'FIGCAPTION',
+            'FIGURE',
+            'FOOTER',
+            'HEADER',
+            'H1',
+            'H2',
+            'H3',
+            'H4',
+            'H5',
+            'H6',
+            'LI',
+            'MAIN',
+            'NAV',
+            'OL',
+            'P',
+            'PRE',
+            'SECTION',
+            'UL'
+        ]);
+
+        const collect = node => {
+            if (node.nodeType === Node.TEXT_NODE) {
+                return node.nodeValue || '';
+            }
+
+            if (node.nodeType !== Node.ELEMENT_NODE) {
+                return '';
+            }
+
+            if (node.tagName === 'BR') {
+                return '\n';
+            }
+
+            let text = '';
+
+            for (const child of node.childNodes) {
+                text += collect(child);
+            }
+
+            if (
+                blockTags.has(node.tagName)
+                && text
+                && !text.endsWith('\n')
+            ) {
+                text += '\n';
+            }
+
+            return text;
+        };
+
+        return collect(container)
+            .replace(/\r\n?/g, '\n')
+            .replace(/\n{3,}/g, '\n\n')
+            .replace(/\n$/, '');
+    }
+
+    #selectionCodeBlock(editable) {
+        if (!(editable instanceof HTMLElement)) {
+            return null;
+        }
+
+        const selection = window.getSelection();
+
+        if (!selection || selection.rangeCount === 0) {
+            return null;
+        }
+
+        const range = selection.getRangeAt(0);
+        const nodes = [
+            range.startContainer,
+            range.endContainer,
+            selection.anchorNode,
+            selection.focusNode
+        ];
+
+        for (const node of nodes) {
+            const element = node?.nodeType === Node.ELEMENT_NODE
+                ? node
+                : node?.parentElement;
+            const pre = element?.closest?.('pre.vhd-code');
+
+            if (
+                pre instanceof HTMLPreElement
+                && editable.contains(pre)
+            ) {
+                return pre;
+            }
+        }
+
+        return null;
+    }
+
+    #codeToText(editable, pre) {
+        if (
+            !(editable instanceof HTMLElement)
+            || !(pre instanceof HTMLPreElement)
+            || !editable.contains(pre)
+        ) {
+            return false;
+        }
+
+        const text = (pre.textContent || '')
+            .replaceAll('\r\n', '\n')
+            .replaceAll('\r', '\n');
+
+        this.#remember();
+
+        const paragraph = document.createElement('p');
+        const lines = text.split('\n');
+
+        lines.forEach((line, index) => {
+            if (index > 0) {
+                paragraph.append(document.createElement('br'));
+            }
+
+            if (line) {
+                paragraph.append(document.createTextNode(line));
+            }
+        });
+
+        if (!paragraph.childNodes.length) {
+            paragraph.append(document.createElement('br'));
+        }
+
+        pre.replaceWith(paragraph);
+
+        const range = document.createRange();
+        range.selectNodeContents(paragraph);
+        range.collapse(false);
+
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+
+        editable.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: 'formatBlock',
+            data: 'p'
+        }));
+
+        editable.focus();
+        this.textToolbar.setActiveEditable(editable);
+
+        return true;
+    }
+
+    #insertInlineCode(editable) {
+        if (
+            !(editable instanceof HTMLElement)
+            || editable.contentEditable !== 'true'
+            || !editable.classList.contains('vhd-editable-text')
+        ) {
+            return false;
+        }
+
+        const currentCode = this.#selectionCodeBlock(editable);
+
+        if (currentCode) {
+            return this.#codeToText(editable, currentCode);
+        }
+
+        const selection = window.getSelection();
+        let range = null;
+
+        if (
+            selection
+            && selection.rangeCount > 0
+            && editable.contains(
+                selection.getRangeAt(0).commonAncestorContainer
+            )
+        ) {
+            range = selection.getRangeAt(0).cloneRange();
+        }
+
+        if (!range) {
+            range = document.createRange();
+            range.selectNodeContents(editable);
+            range.collapse(false);
+        }
+
+        const selectedText = range.collapsed
+            ? ''
+            : this.#rangeToPlainText(range);
+
+        this.#remember();
+        range.deleteContents();
+
+        const pre = document.createElement('pre');
+        pre.className = 'vhd-code';
+
+        const code = document.createElement('code');
+        code.textContent = selectedText;
+
+        if (!selectedText) {
+            code.append(document.createElement('br'));
+        }
+
+        pre.append(code);
+        range.insertNode(pre);
+
+        /*
+         * Keep a normal paragraph immediately after a code region. This makes
+         * it possible to continue writing without having to create another
+         * VHD content block.
+         */
+        let paragraph = pre.nextElementSibling;
+
+        if (
+            !(paragraph instanceof HTMLElement)
+            || paragraph.tagName !== 'P'
+        ) {
+            paragraph = document.createElement('p');
+            paragraph.append(document.createElement('br'));
+            pre.after(paragraph);
+        }
+
+        const caret = document.createRange();
+
+        if (selectedText) {
+            caret.selectNodeContents(code);
+            caret.collapse(false);
+        } else {
+            caret.selectNodeContents(code);
+            caret.collapse(true);
+        }
+
+        selection?.removeAllRanges();
+        selection?.addRange(caret);
+
+        editable.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: 'insertCode',
+            data: selectedText || null
+        }));
+
+        editable.focus();
+        this.textToolbar.setActiveEditable(editable);
+
+        return true;
+    }
+
+    #insertTextAtRange(range, text) {
+        const node = document.createTextNode(text);
+        range.deleteContents();
+        range.insertNode(node);
+
+        const selection = window.getSelection();
+        const caret = document.createRange();
+        caret.setStartAfter(node);
+        caret.collapse(true);
+        selection?.removeAllRanges();
+        selection?.addRange(caret);
+    }
+
+    #moveCaretAfterCode(pre, editable) {
+        let paragraph = pre.nextElementSibling;
+
+        if (
+            !(paragraph instanceof HTMLElement)
+            || paragraph.tagName !== 'P'
+        ) {
+            paragraph = document.createElement('p');
+            paragraph.append(document.createElement('br'));
+            pre.after(paragraph);
+        }
+
+        const range = document.createRange();
+        range.selectNodeContents(paragraph);
+        range.collapse(true);
+
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+
+        editable.focus();
     }
 
     #getSearchableElements() {
@@ -380,18 +633,6 @@ export default class Editor {
                 return;
             }
 
-            if (block.type === 'code') {
-                const element = wrapper.querySelector('.vhd-code-editor');
-
-                if (element) {
-                    items.push({
-                        block,
-                        wrapper,
-                        element,
-                        kind: 'code'
-                    });
-                }
-            }
         });
 
         return items;
@@ -492,12 +733,6 @@ export default class Editor {
             behavior: 'smooth'
         });
 
-        if (match.kind === 'code') {
-            match.element.focus();
-            match.element.setSelectionRange(match.start, match.end);
-            return;
-        }
-
         const range = this.#rangeFromTextOffsets(
             match.element,
             match.start,
@@ -520,21 +755,6 @@ export default class Editor {
     #replaceSearchMatch(match, replacement) {
         if (!match) {
             return false;
-        }
-
-        if (match.kind === 'code') {
-            match.element.setRangeText(
-                replacement,
-                match.start,
-                match.end,
-                'end'
-            );
-
-            match.element.dispatchEvent(new Event('input', {
-                bubbles: true
-            }));
-
-            return true;
         }
 
         const range = this.#rangeFromTextOffsets(
@@ -994,8 +1214,6 @@ export default class Editor {
                 for (const block of column.blocks ?? []) {
                     if (block.type === 'heading' || block.type === 'text') {
                         countText(this.#textFromHtml(block.content));
-                    } else if (block.type === 'code') {
-                        countText(block.code);
                     } else if (block.type === 'table') {
                         for (const tableRow of block.rows ?? []) {
                             for (const cell of tableRow ?? []) {
@@ -1176,9 +1394,322 @@ export default class Editor {
         return field;
     }
 
+    #getPluginPropertyValue(block, key) {
+        if (!key) {
+            return undefined;
+        }
+
+        if (key.startsWith('properties.')) {
+            const propertyKey = key.slice('properties.'.length);
+            return block.properties?.[propertyKey];
+        }
+
+        return block[key];
+    }
+
+    #setPluginPropertyValue(block, key, value) {
+        if (!key) {
+            return;
+        }
+
+        if (key.startsWith('properties.')) {
+            const propertyKey = key.slice('properties.'.length);
+            block.properties ??= {};
+            block.properties[propertyKey] = value;
+            return;
+        }
+
+        block[key] = value;
+    }
+
+    #normalizePluginPropertyValue(schema, rawValue) {
+        const type = String(schema.type || 'text');
+
+        if (type === 'number') {
+            const number = Number(rawValue);
+
+            if (!Number.isFinite(number)) {
+                return Number(schema.default ?? 0);
+            }
+
+            return number;
+        }
+
+        if (type === 'checkbox') {
+            return Boolean(rawValue);
+        }
+
+        return String(rawValue ?? '');
+    }
+
+    #pluginPropertyField(block, schema) {
+        const key = String(schema?.key ?? '').trim();
+        const label = String(schema?.label ?? key).trim();
+        const type = String(schema?.type ?? 'text').trim();
+
+        if (!key || !label) {
+            return null;
+        }
+
+        const supported = new Set([
+            'text',
+            'textarea',
+            'url',
+            'number',
+            'color',
+            'select',
+            'checkbox'
+        ]);
+
+        if (!supported.has(type)) {
+            console.warn(
+                `Vanilla HTML Designer: unsupported plugin property type "${type}" for "${key}".`
+            );
+            return null;
+        }
+
+        const field = document.createElement('label');
+        field.className = 'vhd-property-field vhd-plugin-property-field';
+        field.dataset.vhdPluginProperty = key;
+
+        const caption = document.createElement('span');
+        caption.textContent = label;
+        field.append(caption);
+
+        const currentValue = this.#getPluginPropertyValue(
+            block,
+            key
+        );
+
+        const commit = value => {
+            const normalized = this.#normalizePluginPropertyValue(
+                schema,
+                value
+            );
+
+            this.#remember();
+            this.#setPluginPropertyValue(
+                block,
+                key,
+                normalized
+            );
+
+            this.#emit('change', {
+                source: 'plugin:property',
+                blockId: block.id,
+                type: block.type,
+                property: key,
+                value: structuredClone(normalized)
+            });
+
+            if (schema.render !== false) {
+                this.render();
+            }
+        };
+
+        let control = null;
+
+        if (type === 'select') {
+            control = document.createElement('select');
+
+            const options = Array.isArray(schema.options)
+                ? schema.options
+                : [];
+
+            for (const option of options) {
+                const item = document.createElement('option');
+
+                if (Array.isArray(option)) {
+                    item.value = String(option[0] ?? '');
+                    item.textContent = String(option[1] ?? option[0] ?? '');
+                } else if (option && typeof option === 'object') {
+                    item.value = String(option.value ?? '');
+                    item.textContent = String(option.label ?? option.value ?? '');
+                } else {
+                    item.value = String(option ?? '');
+                    item.textContent = String(option ?? '');
+                }
+
+                control.append(item);
+            }
+
+            control.value = String(
+                currentValue
+                ?? schema.default
+                ?? control.options[0]?.value
+                ?? ''
+            );
+
+            control.addEventListener('change', () => {
+                commit(control.value);
+            });
+        } else if (type === 'checkbox') {
+            const wrapper = document.createElement('span');
+            wrapper.className = 'vhd-plugin-property-checkbox';
+
+            control = document.createElement('input');
+            control.type = 'checkbox';
+            control.checked = Boolean(
+                currentValue
+                ?? schema.default
+                ?? false
+            );
+
+            control.addEventListener('change', () => {
+                commit(control.checked);
+            });
+
+            wrapper.append(control);
+            field.append(wrapper);
+            return field;
+        } else if (type === 'textarea') {
+            control = document.createElement('textarea');
+            control.rows = Math.max(
+                2,
+                Number(schema.rows ?? 4)
+            );
+            control.value = String(
+                currentValue
+                ?? schema.default
+                ?? ''
+            );
+
+            const eventName = schema.live === true
+                ? 'input'
+                : 'change';
+
+            control.addEventListener(eventName, () => {
+                commit(control.value);
+            });
+        } else {
+            control = document.createElement('input');
+            control.type = type === 'url'
+                ? 'url'
+                : type;
+
+            if (type === 'url') {
+                control.inputMode = 'url';
+                control.autocomplete = 'url';
+            }
+
+            if (type === 'number') {
+                if (schema.min != null) {
+                    control.min = String(schema.min);
+                }
+                if (schema.max != null) {
+                    control.max = String(schema.max);
+                }
+                if (schema.step != null) {
+                    control.step = String(schema.step);
+                }
+            }
+
+            control.value = String(
+                currentValue
+                ?? schema.default
+                ?? ''
+            );
+
+            const eventName = (
+                type === 'color'
+                || schema.live === true
+            )
+                ? 'input'
+                : 'change';
+
+            control.addEventListener(eventName, () => {
+                commit(control.value);
+            });
+        }
+
+        if (schema.placeholder && 'placeholder' in control) {
+            control.placeholder = String(schema.placeholder);
+        }
+
+        field.append(control);
+        return field;
+    }
+
+    #appendPluginPropertySchema(panel, block, schemaItems) {
+        if (!Array.isArray(schemaItems)) {
+            return;
+        }
+
+        let currentGroup = null;
+
+        for (const item of schemaItems) {
+            if (!item || typeof item !== 'object') {
+                continue;
+            }
+
+            if (
+                item.type === 'group'
+                || item.type === 'section'
+            ) {
+                const title = document.createElement('h4');
+                title.className = 'vhd-property-subtitle vhd-plugin-property-group';
+                title.textContent = String(
+                    item.label
+                    ?? item.title
+                    ?? ''
+                ).trim();
+
+                if (title.textContent) {
+                    panel.append(title);
+                }
+
+                if (Array.isArray(item.fields)) {
+                    this.#appendPluginPropertySchema(
+                        panel,
+                        block,
+                        item.fields
+                    );
+                }
+
+                currentGroup = item;
+                continue;
+            }
+
+            const field = this.#pluginPropertyField(
+                block,
+                item
+            );
+
+            if (field) {
+                if (
+                    currentGroup?.description
+                    && !panel.querySelector(
+                        `[data-vhd-plugin-group-description="${CSS.escape(String(currentGroup.label ?? currentGroup.title ?? ''))}"]`
+                    )
+                ) {
+                    const description = document.createElement('p');
+                    description.className = 'vhd-plugin-property-group-description';
+                    description.dataset.vhdPluginGroupDescription =
+                        String(
+                            currentGroup.label
+                            ?? currentGroup.title
+                            ?? ''
+                        );
+                    description.textContent =
+                        String(currentGroup.description);
+
+                    panel.append(description);
+                }
+
+                panel.append(field);
+            }
+        }
+    }
+
     #selectProperties(kind, target, element) {
         this.root.querySelectorAll('.vhd-selected').forEach(item => item.classList.remove('vhd-selected'));
         element?.classList.add('vhd-selected');
+
+        if (kind === 'block') {
+            this.#emit('block:select', {
+                block: structuredClone(target)
+            });
+        }
 
         const panel = this.propertiesPanel;
         panel.replaceChildren(
@@ -1197,11 +1728,32 @@ export default class Editor {
         } else if (kind === 'column') {
             title.textContent = this.t.properties.column;
         } else {
-            title.textContent = this.t.blocks[target.type] || target.type;
+            title.textContent = BlockFactory.getLabel(
+                target.type,
+                this.t.blocks
+            );
         }
         panel.append(title);
 
         target.properties ??= {};
+
+        if (kind === 'block') {
+            const definition = BlockFactory.get(target.type);
+
+            if (
+                definition
+                && !definition.native
+                && Array.isArray(definition.properties)
+                && definition.properties.length
+            ) {
+                this.#appendPluginPropertySchema(
+                    panel,
+                    target,
+                    definition.properties
+                );
+            }
+        }
+
         const rerenderStyle = callback => value => {
             callback(value);
             this.#rememberPropertyChange();
@@ -1705,32 +2257,6 @@ export default class Editor {
                     { min: 0, max: 500, step: 1 }
                 )
             );
-        } else if (target.type === 'text' || target.type === 'heading') {
-            panel.append(
-                this.#propertyField(this.t.properties.textColor,'color',target.properties.color||'#1f2937',value=>{target.properties.color=value; const editable=element.querySelector('[contenteditable]'); if(editable) editable.style.color=value;}),
-                this.#propertyField(
-                    this.t.properties.lineHeight,
-                    'number',
-                    target.properties.lineHeight ?? 1.5,
-                    value => {
-                        target.properties.lineHeight = Number(value);
-                        const editable = element.querySelector('[contenteditable]');
-                        if (editable) editable.style.lineHeight = value;
-                    },
-                    { min: 0.5, max: 5, step: 0.1 }
-                ),
-                this.#propertyField(
-                    this.t.properties.letterSpacing,
-                    'number',
-                    target.properties.letterSpacing ?? 0,
-                    value => {
-                        target.properties.letterSpacing = Number(value);
-                        const editable = element.querySelector('[contenteditable]');
-                        if (editable) editable.style.letterSpacing = `${value}px`;
-                    },
-                    { min: 0, step: 0.1 }
-                )
-            );
         }
     }
 
@@ -1760,7 +2286,7 @@ export default class Editor {
         return true;
     }
 
-    addBlock(rowIndex, columnIndex, type) {
+    addBlock(rowIndex, columnIndex, type, insertIndex = null) {
         if (
             this.disabledContentBlocks.has(type)
             || !BlockFactory.types.includes(type)
@@ -1768,8 +2294,26 @@ export default class Editor {
             return false;
         }
 
+        const blocks = this.project
+            .rows[rowIndex]
+            .columns[columnIndex]
+            .blocks;
+
+        const index = Number.isInteger(insertIndex)
+            ? Math.max(0, Math.min(insertIndex, blocks.length))
+            : blocks.length;
+
         this.#remember();
-        this.project.rows[rowIndex].columns[columnIndex].blocks.push(BlockFactory.create(type));
+        const block = BlockFactory.create(type);
+        blocks.splice(index, 0, block);
+
+        this.#emit('block:add', {
+            block: structuredClone(block),
+            rowIndex,
+            columnIndex,
+            blockIndex: index
+        });
+        this.#emit('change', { source: 'block:add' });
         this.render();
         return true;
     }
@@ -2070,7 +2614,17 @@ export default class Editor {
 
     removeBlock(rowIndex, columnIndex, blockIndex) {
         this.#remember();
-        this.project.rows[rowIndex].columns[columnIndex].blocks.splice(blockIndex, 1);
+        const [block] = this.project.rows[rowIndex]
+            .columns[columnIndex]
+            .blocks.splice(blockIndex, 1);
+
+        this.#emit('block:remove', {
+            block: block ? structuredClone(block) : null,
+            rowIndex,
+            columnIndex,
+            blockIndex
+        });
+        this.#emit('change', { source: 'block:remove' });
         this.render();
     }
 
@@ -2399,9 +2953,118 @@ export default class Editor {
         this.render();
     }
 
+    #blockControlInsertMenu(rowIndex, columnIndex, insertIndex) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'vhd-block-control-insert';
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'vhd-mini-button vhd-block-control-insert-trigger';
+        trigger.textContent = '+';
+        trigger.title = this.t.editor.addBlock;
+        trigger.setAttribute('aria-label', this.t.editor.addBlock);
+        trigger.setAttribute('aria-haspopup', 'true');
+        trigger.setAttribute('aria-expanded', 'false');
+
+        const menu = document.createElement('div');
+        menu.className = 'vhd-block-add-menu vhd-block-control-insert-menu';
+        menu.hidden = true;
+        menu.setAttribute('role', 'menu');
+
+        const availableTypes = BlockFactory.types.filter(
+            type => !this.disabledContentBlocks.has(type)
+        );
+
+        for (const type of availableTypes) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'vhd-block-add-item';
+            button.setAttribute('role', 'menuitem');
+            button.dataset.vhdContentBlock = type;
+
+            const definition = BlockFactory.get(type);
+            const label = BlockFactory.getLabel(
+                type,
+                this.t.blocks
+            );
+
+            if (definition?.icon) {
+                const icon = document.createElement('span');
+                icon.className = 'vhd-block-add-item-icon';
+                icon.innerHTML = definition.icon;
+
+                const text = document.createElement('span');
+                text.textContent = label;
+
+                button.append(icon, text);
+            } else {
+                button.textContent = label;
+            }
+
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                menu.hidden = true;
+                trigger.setAttribute('aria-expanded', 'false');
+
+                this.addBlock(
+                    rowIndex,
+                    columnIndex,
+                    type,
+                    insertIndex
+                );
+            });
+
+            menu.append(button);
+        }
+
+        if (!availableTypes.length) {
+            wrapper.hidden = true;
+            return wrapper;
+        }
+
+        trigger.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const willOpen = menu.hidden;
+
+            this.root.querySelectorAll('.vhd-block-add-menu').forEach(other => {
+                if (other !== menu) {
+                    other.hidden = true;
+                }
+            });
+
+            this.root.querySelectorAll('.vhd-add-trigger, .vhd-block-control-insert-trigger')
+                .forEach(other => {
+                    if (other !== trigger) {
+                        other.setAttribute('aria-expanded', 'false');
+                    }
+                });
+
+            menu.hidden = !willOpen;
+            trigger.setAttribute(
+                'aria-expanded',
+                willOpen ? 'true' : 'false'
+            );
+        });
+
+        wrapper.addEventListener('click', event => {
+            event.stopPropagation();
+        });
+
+        wrapper.append(trigger, menu);
+        return wrapper;
+    }
+
     #blockControls(rowIndex, columnIndex, blockIndex) {
         const controls = document.createElement('div');
         controls.className = 'vhd-block-controls';
+
+        const insertAbove = this.#blockControlInsertMenu(
+            rowIndex,
+            columnIndex,
+            blockIndex
+        );
 
         const drag = this.#miniButton('⋮⋮', this.t.editor.dragBlock, () => {});
         drag.classList.add('vhd-block-drag-handle');
@@ -2425,7 +3088,7 @@ export default class Editor {
             this.removeBlock(rowIndex, columnIndex, blockIndex);
         });
 
-        controls.append(drag, remove);
+        controls.append(insertAbove, drag, remove);
         return controls;
     }
 
@@ -2806,13 +3469,19 @@ export default class Editor {
             0,
             Number(image.dataset.spacing || 0)
         );
+        const borderRadius = Math.max(
+            0,
+            Number(image.dataset.borderRadius || 0)
+        );
 
         image.dataset.align = align;
         image.dataset.size = String(size);
         image.dataset.spacing = String(spacing);
+        image.dataset.borderRadius = String(borderRadius);
         image.style.width = `${size}%`;
         image.style.maxWidth = '100%';
         image.style.height = 'auto';
+        image.style.borderRadius = `${borderRadius}px`;
 
         /*
          * Inline images can live directly inside a contenteditable table
@@ -3089,8 +3758,18 @@ export default class Editor {
 
         const currentSize = Math.min(100, Math.max(1, Number(image.dataset.size || 33)));
         const currentSpacing = Math.max(0, Number(image.dataset.spacing || 0));
+        const currentBorderRadius = Math.max(0, Number(image.dataset.borderRadius || 0));
 
         panel.append(
+            this.#propertyField(
+                this.t.properties.alt,
+                'text',
+                image.getAttribute('alt') || '',
+                value => {
+                    image.alt = value;
+                    this.#syncInlineImage(image);
+                }
+            ),
             this.#propertyField(
                 this.t.properties.align,
                 'select',
@@ -3116,6 +3795,18 @@ export default class Editor {
                     input.max = '100';
                     input.min = '1';
                     image.dataset.size = String(size);
+                    this.#applyInlineImageStyles(image);
+                    this.#syncInlineImage(image);
+                }
+            ),
+            this.#propertyField(
+                this.t.properties.borderRadius,
+                'number',
+                currentBorderRadius,
+                (value, input) => {
+                    const borderRadius = Math.max(0, Number(value) || 0);
+                    input.min = '0';
+                    image.dataset.borderRadius = String(borderRadius);
                     this.#applyInlineImageStyles(image);
                     this.#syncInlineImage(image);
                 }
@@ -3157,6 +3848,17 @@ export default class Editor {
                     Number.parseFloat(computed.marginRight) || 0,
                     Number.parseFloat(computed.marginBottom) || 0,
                     Number.parseFloat(computed.marginLeft) || 0
+                )
+            );
+        }
+
+        if (!image.dataset.borderRadius) {
+            image.dataset.borderRadius = String(
+                Math.max(
+                    0,
+                    Number.parseFloat(image.style.borderRadius)
+                    || Number.parseFloat(window.getComputedStyle(image).borderRadius)
+                    || 0
                 )
             );
         }
@@ -3283,6 +3985,229 @@ export default class Editor {
         }));
     }
 
+    #hideSelectionMenu() {
+        if (this.selectionMenu instanceof HTMLElement) {
+            this.selectionMenu.hidden = true;
+        }
+
+        this.selectionMenuRange = null;
+        this.selectionMenuEditable = null;
+    }
+
+    #restoreSelectionMenuRange() {
+        if (
+            !(this.selectionMenuRange instanceof Range)
+            || !(this.selectionMenuEditable instanceof HTMLElement)
+        ) {
+            return false;
+        }
+
+        const selection = window.getSelection();
+
+        if (!selection) {
+            return false;
+        }
+
+        selection.removeAllRanges();
+        selection.addRange(this.selectionMenuRange.cloneRange());
+        this.selectionMenuEditable.focus();
+        this.textToolbar.setActiveEditable(this.selectionMenuEditable);
+
+        return true;
+    }
+
+    #runSelectionMenuAction(action) {
+        const editable = this.selectionMenuEditable;
+
+        if (!(editable instanceof HTMLElement)) {
+            this.#hideSelectionMenu();
+            return;
+        }
+
+        const restore = () => this.#restoreSelectionMenuRange();
+
+        if (action === 'bold') {
+            if (!restore()) {
+                return;
+            }
+
+            this.#remember();
+            document.execCommand('bold', false, null);
+            editable.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                inputType: 'formatBold',
+                data: null
+            }));
+            this.#hideSelectionMenu();
+            return;
+        }
+
+        if (action === 'h2') {
+            if (!restore()) {
+                return;
+            }
+
+            this.#remember();
+            document.execCommand('formatBlock', false, 'h2');
+            editable.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                inputType: 'formatBlock',
+                data: 'h2'
+            }));
+            this.#hideSelectionMenu();
+            return;
+        }
+
+        if (action === 'code') {
+            if (!restore()) {
+                return;
+            }
+
+            this.#insertInlineCode(editable);
+            this.#hideSelectionMenu();
+            return;
+        }
+
+        if (action === 'link') {
+            const url = window.prompt('URL');
+
+            if (!url || !restore()) {
+                this.#hideSelectionMenu();
+                return;
+            }
+
+            this.#remember();
+            document.execCommand('createLink', false, url);
+            editable.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                inputType: 'createLink',
+                data: url
+            }));
+            this.#hideSelectionMenu();
+        }
+    }
+
+    #ensureSelectionMenu() {
+        if (this.selectionMenu instanceof HTMLElement) {
+            return this.selectionMenu;
+        }
+
+        const menu = document.createElement('div');
+        menu.className = 'vhd-selection-menu';
+        menu.hidden = true;
+        menu.setAttribute('role', 'toolbar');
+        menu.setAttribute('aria-label', 'Actions sur la sélection');
+
+        const items = [
+            ['h2', 'H2', 'Titre H2'],
+            ['bold', 'B', this.t.toolbar.bold],
+            ['code', '</>', this.t.toolbar.insertCode],
+            ['link', '🔗', this.t.toolbar.link]
+        ];
+
+        items.forEach(([action, label, title]) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = `vhd-selection-menu-button vhd-selection-menu-${action}`;
+            button.dataset.action = action;
+            button.textContent = label;
+            button.title = title;
+            button.setAttribute('aria-label', title);
+
+            button.addEventListener('mousedown', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                this.#runSelectionMenuAction(action);
+            });
+
+            menu.append(button);
+        });
+
+        menu.addEventListener('pointerdown', event => {
+            event.stopPropagation();
+        });
+
+        menu.addEventListener('pointerup', event => {
+            event.stopPropagation();
+        });
+
+        document.body.append(menu);
+        this.selectionMenu = menu;
+
+        return menu;
+    }
+
+    #showSelectionMenu(editable) {
+        if (
+            !(editable instanceof HTMLElement)
+            || !editable.classList.contains('vhd-editable-text')
+        ) {
+            this.#hideSelectionMenu();
+            return;
+        }
+
+        const selection = window.getSelection();
+
+        if (
+            !selection
+            || selection.rangeCount === 0
+            || selection.isCollapsed
+        ) {
+            this.#hideSelectionMenu();
+            return;
+        }
+
+        const range = selection.getRangeAt(0);
+
+        if (
+            !editable.contains(range.commonAncestorContainer)
+            && range.commonAncestorContainer !== editable
+        ) {
+            this.#hideSelectionMenu();
+            return;
+        }
+
+        const text = this.#rangeToPlainText(range);
+
+        if (!text.trim()) {
+            this.#hideSelectionMenu();
+            return;
+        }
+
+        const rect = range.getBoundingClientRect();
+
+        if (!rect.width && !rect.height) {
+            this.#hideSelectionMenu();
+            return;
+        }
+
+        const menu = this.#ensureSelectionMenu();
+
+        this.selectionMenuRange = range.cloneRange();
+        this.selectionMenuEditable = editable;
+
+        menu.hidden = false;
+
+        const menuRect = menu.getBoundingClientRect();
+        const gap = 8;
+        const viewportPadding = 8;
+
+        let left = rect.left + (rect.width / 2) - (menuRect.width / 2);
+        left = Math.max(
+            viewportPadding,
+            Math.min(left, window.innerWidth - menuRect.width - viewportPadding)
+        );
+
+        let top = rect.top - menuRect.height - gap;
+
+        if (top < viewportPadding) {
+            top = rect.bottom + gap;
+        }
+
+        menu.style.left = `${Math.round(left)}px`;
+        menu.style.top = `${Math.round(top)}px`;
+    }
+
     #editable(element, block, property) {
         element.contentEditable = 'true';
         element.spellcheck = true;
@@ -3293,8 +4218,79 @@ export default class Editor {
             this.textToolbar.show();
         });
 
+        if (element.classList.contains('vhd-editable-text')) {
+            element.addEventListener('pointerdown', () => {
+                this.#hideSelectionMenu();
+            });
+
+            element.addEventListener('keyup', event => {
+                if (
+                    event.shiftKey
+                    || [
+                        'ArrowLeft',
+                        'ArrowRight',
+                        'ArrowUp',
+                        'ArrowDown',
+                        'Home',
+                        'End'
+                    ].includes(event.key)
+                ) {
+                    requestAnimationFrame(() => {
+                        this.#showSelectionMenu(element);
+                    });
+                }
+            });
+        }
+
         element.addEventListener('paste', event => {
             this.#pastePlainText(event, element);
+        });
+
+        element.addEventListener('keydown', event => {
+            const selection = window.getSelection();
+
+            if (!selection || selection.rangeCount === 0) {
+                return;
+            }
+
+            const range = selection.getRangeAt(0);
+            const startElement = range.startContainer.nodeType === Node.ELEMENT_NODE
+                ? range.startContainer
+                : range.startContainer.parentElement;
+            const pre = startElement?.closest?.('pre.vhd-code');
+
+            if (!pre || !element.contains(pre)) {
+                return;
+            }
+
+            /*
+             * Inside code, Tab belongs to the source text instead of browser
+             * focus navigation.
+             */
+            if (event.key === 'Tab') {
+                event.preventDefault();
+                this.#remember();
+                this.#insertTextAtRange(range, '    ');
+
+                element.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    inputType: 'insertText',
+                    data: '    '
+                }));
+                return;
+            }
+
+            /*
+             * Ctrl/Cmd + Enter exits the code area and continues in the
+             * paragraph that follows it.
+             */
+            if (
+                event.key === 'Enter'
+                && (event.ctrlKey || event.metaKey)
+            ) {
+                event.preventDefault();
+                this.#moveCaretAfterCode(pre, element);
+            }
         });
 
         element.addEventListener('pointerdown', event => {
@@ -3373,7 +4369,12 @@ export default class Editor {
         });
 
         element.addEventListener('input', () => {
+            this.#hideSelectionMenu();
             block[property] = element.innerHTML;
+            this.#emit('change', {
+                source: 'content',
+                blockId: block.id
+            });
 
             const selectedImage = this.root.querySelector(
                 '.vhd-inline-image.is-selected'
@@ -3389,7 +4390,14 @@ export default class Editor {
             this.#updateDocumentStatistics();
         });
 
-        element.addEventListener('blur', () => {
+        element.addEventListener('blur', event => {
+            if (
+                !(this.selectionMenu instanceof HTMLElement)
+                || !this.selectionMenu.contains(event.relatedTarget)
+            ) {
+                this.#hideSelectionMenu();
+            }
+
             block[property] = element.innerHTML;
             this.#updateDocumentStatistics();
         });
@@ -6314,12 +7322,65 @@ export default class Editor {
         wrapper.dataset.blockIndex = String(blockIndex);
         wrapper.append(this.#blockControls(rowIndex, columnIndex, blockIndex));
 
+        const blockDefinition = BlockFactory.get(block.type);
+
+        if (blockDefinition && !blockDefinition.native) {
+            const update = (patch = {}, options = {}) => {
+                if (!patch || typeof patch !== 'object') {
+                    return false;
+                }
+
+                this.#remember();
+                Object.assign(
+                    block,
+                    structuredClone(patch),
+                    { type: blockDefinition.type }
+                );
+
+                this.#emit('change', {
+                    source: 'plugin:block',
+                    blockId: block.id,
+                    type: block.type
+                });
+
+                if (options.render !== false) {
+                    this.render();
+                }
+
+                return true;
+            };
+
+            const rendered = blockDefinition.render({
+                block: structuredClone(block),
+                element: wrapper,
+                update,
+                render: () => this.render()
+            });
+
+            if (rendered instanceof Node) {
+                wrapper.append(rendered);
+            } else if (typeof rendered === 'string') {
+                const container = document.createElement('div');
+                container.className = 'vhd-plugin-block-content';
+                container.innerHTML = rendered;
+                wrapper.append(container);
+            } else if (rendered != null) {
+                console.warn(
+                    `Vanilla HTML Designer: plugin block "${block.type}" render() should return a DOM Node, HTML string or null.`
+                );
+            }
+
+            wrapper.addEventListener('click', event => {
+                event.stopPropagation();
+                this.#selectProperties('block', block, wrapper);
+            });
+
+            return wrapper;
+        }
+
         if (block.type === 'heading') {
             const heading = document.createElement(`h${block.level || 2}`);
             heading.innerHTML = block.content || '';
-            heading.style.color = block.properties?.color || '#1f2937';
-            heading.style.lineHeight = String(block.properties?.lineHeight ?? 1.2);
-            heading.style.letterSpacing = `${block.properties?.letterSpacing ?? 0}px`;
             this.#editable(heading, block, 'content');
             wrapper.append(heading);
         }
@@ -6328,9 +7389,6 @@ export default class Editor {
             const text = document.createElement('div');
             text.className = 'vhd-editable-text';
             text.innerHTML = block.content || '';
-            text.style.color = block.properties?.color || '#1f2937';
-            text.style.lineHeight = String(block.properties?.lineHeight ?? 1.5);
-            text.style.letterSpacing = `${block.properties?.letterSpacing ?? 0}px`;
             this.#editable(text, block, 'content');
             wrapper.append(text);
         }
@@ -6379,23 +7437,6 @@ export default class Editor {
             wrapper.append(editorPreview);
         }
 
-        if (block.type === 'code') {
-            const editor = document.createElement('textarea');
-            editor.className = 'vhd-code-editor';
-            editor.spellcheck = false;
-            editor.rows = Math.max(5, Math.min(18, String(block.code || '').split('\n').length + 1));
-            editor.value = block.code || '';
-            editor.placeholder = this.t.editor.codePlaceholder;
-
-            editor.addEventListener('input', () => {
-                block.code = editor.value;
-                editor.rows = Math.max(5, Math.min(18, editor.value.split('\n').length + 1));
-                this.#updateDocumentStatistics();
-            });
-
-            wrapper.append(editor);
-        }
-
         if (block.type === 'divider') {
             const hr = document.createElement('hr');
             hr.style.borderTopColor = block.properties?.color || '#9ca3af';
@@ -6420,9 +7461,24 @@ export default class Editor {
         return wrapper;
     }
 
-    #blockMenu(rowIndex, columnIndex) {
+    #blockMenu(
+        rowIndex,
+        columnIndex,
+        insertIndex = null,
+        placement = 'column'
+    ) {
         const wrapper = document.createElement('div');
-        wrapper.className = 'vhd-block-add vhd-content-add';
+        wrapper.className = [
+            'vhd-block-add',
+            'vhd-content-add',
+            'vhd-block-insert-point',
+            `vhd-block-insert-${placement}`
+        ].join(' ');
+        wrapper.dataset.insertIndex = String(
+            Number.isInteger(insertIndex)
+                ? insertIndex
+                : ''
+        );
 
         const trigger = document.createElement('button');
         trigger.type = 'button';
@@ -6448,11 +7504,35 @@ export default class Editor {
             button.className = 'vhd-block-add-item';
             button.setAttribute('role', 'menuitem');
             button.dataset.vhdContentBlock = type;
-            button.textContent = this.t.blocks[type];
+
+            const definition = BlockFactory.get(type);
+            const label = BlockFactory.getLabel(
+                type,
+                this.t.blocks
+            );
+
+            if (definition?.icon) {
+                const icon = document.createElement('span');
+                icon.className = 'vhd-block-add-item-icon';
+                icon.innerHTML = definition.icon;
+
+                const text = document.createElement('span');
+                text.textContent = label;
+
+                button.append(icon, text);
+            } else {
+                button.textContent = label;
+            }
+
             button.addEventListener('click', () => {
                 menu.hidden = true;
                 trigger.setAttribute('aria-expanded', 'false');
-                this.addBlock(rowIndex, columnIndex, type);
+                this.addBlock(
+                    rowIndex,
+                    columnIndex,
+                    type,
+                    insertIndex
+                );
             });
             menu.append(button);
         }
@@ -6683,13 +7763,28 @@ export default class Editor {
                     }
                 });
 
-                column.blocks.forEach((block, blockIndex) => {
+                if (!column.blocks.length) {
                     columnElement.append(
-                        this.#renderBlock(block, rowIndex, columnIndex, blockIndex)
+                        this.#blockMenu(
+                            rowIndex,
+                            columnIndex,
+                            0,
+                            'column'
+                        )
                     );
-                });
+                } else {
+                    column.blocks.forEach((block, blockIndex) => {
+                        columnElement.append(
+                            this.#renderBlock(
+                                block,
+                                rowIndex,
+                                columnIndex,
+                                blockIndex
+                            )
+                        );
+                    });
+                }
 
-                columnElement.append(this.#blockMenu(rowIndex, columnIndex));
                 grid.append(columnElement);
             });
 
@@ -6717,6 +7812,7 @@ export default class Editor {
         this.project = this.#normalizeLegacyColumnBackgrounds(
             project || this.#createDefaultProject()
         );
+        this.#emit('change', { source: 'load:html' });
         this.render();
     }
 
@@ -6739,6 +7835,7 @@ export default class Editor {
                 ? structuredClone(project)
                 : this.#createDefaultProject()
         );
+        this.#emit('change', { source: 'load' });
         this.render();
     }
 
@@ -6747,6 +7844,7 @@ export default class Editor {
 
         if (state) {
             this.project = state;
+            this.#emit('change', { source: 'undo' });
             this.render();
         }
     }
@@ -6756,6 +7854,7 @@ export default class Editor {
 
         if (state) {
             this.project = state;
+            this.#emit('change', { source: 'redo' });
             this.render();
         }
     }

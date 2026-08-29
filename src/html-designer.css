@@ -482,6 +482,22 @@
     fill: currentColor;
 }
 
+.vhd-list-style-example {
+    display: inline-flex;
+    min-width: 44px;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .02em;
+}
+
+.vhd-list-style-example.is-bullet {
+    font-size: 18px;
+    line-height: 1;
+}
+
 .vhd-toolbar-color-control {
     position: relative;
     display: inline-flex;
@@ -1688,78 +1704,6 @@
     right: 0;
     left: auto;
     transform: none;
-}
-
-
-/* 0.6.24 — code blocks */
-.vhd-code-editor {
-    box-sizing: border-box;
-    display: block;
-    width: 100%;
-    min-height: 120px;
-    padding: 16px;
-    resize: vertical;
-    border: 1px solid var(--vhd-border);
-    border-radius: 6px;
-    background: #f6f5f3;
-    color: #111827;
-    font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    white-space: pre;
-    tab-size: 4;
-}
-
-.vhd-code-editor:focus {
-    border-color: var(--vhd-accent);
-    outline: 2px solid rgba(37, 99, 235, .12);
-}
-
-.vhd-code-dialog {
-    box-sizing: border-box;
-    width: min(760px, calc(100% - 32px));
-    padding: 0;
-    border: 0;
-    border-radius: 10px;
-    box-shadow: 0 18px 50px rgba(0, 0, 0, .22);
-}
-
-.vhd-code-dialog::backdrop {
-    background: rgba(0, 0, 0, .35);
-}
-
-.vhd-code-dialog-content {
-    display: grid;
-    gap: 14px;
-    padding: 22px;
-}
-
-.vhd-code-dialog-content h2 {
-    margin: 0;
-    font-size: 1.1rem;
-}
-
-.vhd-code-dialog-textarea {
-    box-sizing: border-box;
-    width: 100%;
-    min-height: 280px;
-    padding: 14px;
-    resize: vertical;
-    border: 1px solid var(--vhd-border);
-    border-radius: 6px;
-    background: #f6f5f3;
-    color: #111827;
-    font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    tab-size: 4;
-}
-
-.vhd-code-dialog-textarea:focus {
-    border-color: var(--vhd-accent);
-    outline: 2px solid rgba(37, 99, 235, .12);
-}
-
-.vhd-code-dialog-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
 }
 
 
@@ -3295,4 +3239,493 @@ body.vhd-row-dragging {
 .vhd-row-editor:focus-within {
     border-color: transparent;
     box-shadow: 0 7px 18px rgba(15, 23, 42, .18);
+}
+
+
+/* 0.7.1 — plugin block registry */
+.vhd-block-add-item:has(.vhd-block-add-item-icon) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vhd-block-add-item-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    flex: 0 0 20px;
+}
+
+.vhd-block-add-item-icon svg {
+    width: 16px;
+    height: 16px;
+}
+
+.vhd-plugin-block-content {
+    min-width: 0;
+}
+
+
+/* 0.7.2 — declarative plugin properties */
+.vhd-plugin-property-checkbox {
+    display: flex;
+    align-items: center;
+    min-height: 32px;
+}
+
+.vhd-plugin-property-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+}
+
+
+/* 0.7.4 — richer and grouped plugin properties */
+.vhd-plugin-property-group {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid var(--vhd-border);
+}
+
+.vhd-plugin-property-group:first-of-type {
+    margin-top: 4px;
+}
+
+.vhd-plugin-property-group-description {
+    margin: -2px 0 8px;
+    font-size: .78rem;
+    line-height: 1.35;
+    color: #6b7280;
+}
+
+.vhd-plugin-property-field textarea {
+    width: 100%;
+    min-height: 76px;
+    resize: vertical;
+}
+
+
+/* 0.7.5 — code regions inside Text content */
+.vhd-editable-text pre.vhd-code {
+    box-sizing: border-box;
+    margin: 1em 0;
+    padding: 16px;
+    overflow: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    background: #f6f5f3;
+    color: #111827;
+    font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    white-space: pre;
+    tab-size: 4;
+}
+
+.vhd-editable-text pre.vhd-code > code {
+    font: inherit;
+    color: inherit;
+    background: transparent;
+}
+
+.vhd-editable-text pre.vhd-code:focus-within {
+    border-color: var(--vhd-accent);
+    outline: 2px solid rgba(37, 99, 235, .12);
+}
+
+
+/* 0.7.6 — content insertion points at every block boundary */
+.vhd-block-insert-point {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 12px;
+    max-height: 12px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    overflow: visible;
+    transition:
+        opacity .12s ease,
+        min-height .12s ease,
+        max-height .12s ease;
+}
+
+.vhd-column:hover > .vhd-block-insert-point,
+.vhd-column:focus-within > .vhd-block-insert-point,
+.vhd-column.vhd-selected > .vhd-block-insert-point,
+.vhd-block-insert-point:focus-within {
+    min-height: 28px;
+    max-height: 28px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    opacity: 1;
+}
+
+.vhd-block-insert-point .vhd-add-trigger {
+    width: 26px !important;
+    height: 22px !important;
+    min-width: 26px;
+    min-height: 22px;
+    font-size: .95rem !important;
+    line-height: 1;
+}
+
+.vhd-block-insert-point .vhd-block-add-menu {
+    top: calc(50% + 15px);
+}
+
+/*
+ * The generic legacy end-of-column add spacing is intentionally cancelled
+ * for boundary insertion points.
+ */
+.vhd-column:hover > .vhd-block-insert-point,
+.vhd-column:focus-within > .vhd-block-insert-point,
+.vhd-column.vhd-selected > .vhd-block-insert-point {
+    margin-top: 0;
+    padding-top: 0;
+    border-top-color: transparent;
+}
+
+@media (max-width: 900px) {
+    .vhd-block-insert-point {
+        min-height: 28px;
+        max-height: 28px;
+        opacity: 1;
+        margin: 0;
+        padding: 0;
+        border: 0;
+    }
+}
+
+
+/* 0.7.7 — insertion controls integrated into each content block */
+.vhd-block-controls {
+    align-items: center;
+}
+
+.vhd-block-controls > .vhd-block-insert-top {
+    margin-right: auto;
+}
+
+.vhd-block-bottom-controls {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    min-height: 26px;
+    margin-top: 6px;
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.vhd-block:hover > .vhd-block-bottom-controls,
+.vhd-block:focus-within > .vhd-block-bottom-controls,
+.vhd-block.vhd-selected > .vhd-block-bottom-controls {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.vhd-block-controls > .vhd-block-insert-point,
+.vhd-block-bottom-controls > .vhd-block-insert-point {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 26px;
+    max-height: 26px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    opacity: 1;
+    overflow: visible;
+}
+
+.vhd-block-controls > .vhd-block-insert-point .vhd-add-trigger,
+.vhd-block-bottom-controls > .vhd-block-insert-point .vhd-add-trigger {
+    width: 28px !important;
+    height: 26px !important;
+    min-width: 28px;
+    min-height: 26px;
+    font-size: 1rem !important;
+}
+
+.vhd-block-controls > .vhd-block-insert-point .vhd-block-add-menu {
+    top: calc(100% + 5px);
+    left: 0;
+    transform: none;
+}
+
+.vhd-block-bottom-controls > .vhd-block-insert-point .vhd-block-add-menu {
+    top: calc(100% + 5px);
+    left: auto;
+    right: 0;
+    transform: none;
+}
+
+/*
+ * The 0.7.6 boundary rules remain useful only for an empty column.
+ * Integrated top/bottom controls explicitly override their expansion model.
+ */
+.vhd-block > .vhd-block-controls .vhd-content-add,
+.vhd-block > .vhd-block-bottom-controls .vhd-content-add {
+    opacity: 1;
+    max-height: 26px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+
+/* 0.7.8 — top content + is a true action-row control */
+.vhd-block-controls {
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.vhd-block-control-insert {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    margin-right: auto;
+    padding: 0;
+}
+
+.vhd-block-control-insert-trigger {
+    width: 28px !important;
+    height: 26px !important;
+    min-width: 28px;
+    min-height: 26px;
+    margin: 0;
+    padding: 0;
+    border-radius: 5px !important;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.vhd-block-control-insert-menu {
+    top: calc(100% + 5px);
+    left: 0;
+    transform: none;
+}
+
+/*
+ * Cancel 0.7.7 top-insert layout rules now that the upper + no longer uses
+ * the generic .vhd-content-add / .vhd-block-insert-point structure.
+ */
+.vhd-block-controls > .vhd-block-insert-top {
+    margin-right: 0;
+}
+
+
+/* 0.7.9 — both content insertion controls align left */
+.vhd-block-bottom-controls {
+    justify-content: flex-start;
+}
+
+.vhd-block-bottom-controls > .vhd-block-insert-point .vhd-block-add-menu {
+    left: 0;
+    right: auto;
+    transform: none;
+}
+
+
+/* 0.7.10 — bottom insertion control stays below content */
+.vhd-block-bottom-controls {
+    position: static !important;
+    clear: both;
+    width: 100%;
+    min-height: 26px;
+    margin-top: 8px;
+    margin-bottom: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.vhd-block-bottom-controls > .vhd-block-insert-point {
+    position: relative !important;
+    flex: 0 0 auto;
+    min-height: 26px !important;
+    max-height: 26px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    transform: none !important;
+}
+
+.vhd-block-bottom-controls .vhd-add-trigger {
+    position: static !important;
+    margin: 0 !important;
+    transform: none !important;
+}
+
+.vhd-block-bottom-controls .vhd-block-add-menu {
+    top: calc(100% + 5px) !important;
+    left: 0 !important;
+    right: auto !important;
+    transform: none !important;
+}
+
+/* Ensure floated/inline content above cannot pull the bottom control upward. */
+.vhd-block-bottom-controls::before {
+    content: "";
+    display: block;
+    clear: both;
+}
+
+
+/* 0.7.11 — one insertion control per content */
+.vhd-block-bottom-controls {
+    display: none !important;
+}
+
+/*
+ * The only content insertion control is the + in the upper action row.
+ * It inserts a new content block immediately after the current one.
+ */
+.vhd-block-control-insert {
+    margin-right: auto;
+}
+
+
+/* 0.7.12 — content + joins the right-side action group */
+.vhd-block-control-insert {
+    margin-right: 0;
+}
+
+.vhd-block-controls {
+    justify-content: flex-end;
+}
+
+
+/* 0.7.14 — contextual text-selection menu */
+.vhd-selection-menu {
+    position: fixed;
+    z-index: 10000;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px;
+    border: 1px solid var(--vhd-border, #d1d5db);
+    border-radius: 7px;
+    background: #fff;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, .16);
+}
+
+.vhd-selection-menu[hidden] {
+    display: none;
+}
+
+.vhd-selection-menu-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 30px;
+    padding: 0 7px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #1f2937;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.vhd-selection-menu-button:hover,
+.vhd-selection-menu-button:focus-visible {
+    background: #eef2f7;
+    outline: none;
+}
+
+.vhd-selection-menu-h2 {
+    font-weight: 700;
+}
+
+.vhd-selection-menu-bold {
+    font-weight: 700;
+}
+
+.vhd-selection-menu-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+
+/* 0.7.15 — stronger contextual selection menu */
+.vhd-selection-menu {
+    gap: 5px;
+    padding: 7px;
+    border-width: 1px;
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, .26);
+}
+
+.vhd-selection-menu-button {
+    min-width: 42px;
+    height: 38px;
+    padding: 0 11px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.vhd-selection-menu-button:hover,
+.vhd-selection-menu-button:focus-visible {
+    border-color: #cbd5e1;
+    background: #e8edf4;
+}
+
+.vhd-selection-menu-code {
+    min-width: 52px;
+    font-size: 15px;
+}
+
+.vhd-selection-menu-link {
+    font-size: 17px;
+}
+
+
+/* 0.7.18 — full-row activation for color menu entries */
+.vhd-toolbar-menu-color-item {
+    cursor: pointer;
+}
+
+.vhd-toolbar-menu-color-label {
+    flex: 1 1 auto;
+    cursor: pointer;
+}
+
+.vhd-toolbar-menu-color-item .vhd-toolbar-color-control-menu {
+    flex: 0 0 auto;
+}
+
+
+/* 0.7.20 — selection typography in additional formatting */
+.vhd-toolbar-formatting-select-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: default;
+}
+
+.vhd-toolbar-formatting-select-label {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.vhd-toolbar-formatting-select {
+    flex: 0 0 auto;
+    min-width: 76px;
+    padding: 4px 24px 4px 7px;
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    background: #fff;
+    font: inherit;
 }

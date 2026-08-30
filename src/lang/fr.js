@@ -186,6 +186,7 @@ export default {
     },
     editor: {
         empty: 'Ajoutez une première ligne pour commencer.',
+        textPlaceholder: 'Tapez votre texte ici',
         addBlock: 'Ajouter un contenu',
         moveUp: 'Monter',
         dragBlock: 'Déplacer le bloc',

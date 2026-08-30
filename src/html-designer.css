@@ -1422,8 +1422,8 @@
     opacity: 1;
 }
 
-.vhd-editable-text:empty::before {
-    content: 'Écrivez ici…';
+.vhd-editable-text.vhd-is-empty:not(:focus)::before {
+    content: attr(data-placeholder);
     color: var(--vhd-muted);
     pointer-events: none;
 }
@@ -3585,8 +3585,8 @@ body.vhd-row-dragging {
 }
 
 /*
- * The only content insertion control is the + in the upper action row.
- * It inserts a new content block immediately after the current one.
+ * Each content keeps one insertion control in its upper action row.
+ * A separate end-of-column control is restored in 0.7.25.
  */
 .vhd-block-control-insert {
     margin-right: auto;
@@ -3600,6 +3600,12 @@ body.vhd-row-dragging {
 
 .vhd-block-controls {
     justify-content: flex-end;
+}
+
+
+/* 0.7.25 — end-of-column content insertion */
+.vhd-column > .vhd-block-insert-end {
+    justify-content: flex-start;
 }
 
 

@@ -1,3 +1,23 @@
+## [0.7.25] - 2026-08-30
+
+### Added
+
+- Added one end-of-column `+` control below the last content block.
+- The new control inserts content at `column.blocks.length`, while empty columns keep their existing single insertion control.
+
+## [0.7.24] - 2026-08-30
+
+### Fixed
+
+- Clicking an empty Text block now hides its placeholder immediately and places the caret at the beginning of its first paragraph.
+
+## [0.7.23] - 2026-08-30
+
+### Added
+
+- Empty Text blocks now display a localized visual placeholder: `Tapez votre texte ici` in French and `Type your text here` in English.
+- The placeholder is editor-only and is never stored in block content or exported HTML.
+
 ## [0.7.22] - 2026-08-29
 
 ### Changed

@@ -4213,14 +4213,45 @@ export default class Editor {
         element.spellcheck = true;
         element.style.fontFamily = this.options.defaultFontFamily;
 
+        const syncTextPlaceholder = () => {
+            if (!element.classList.contains('vhd-editable-text')) {
+                return;
+            }
+
+            const hasVisibleContent = element.textContent.trim() !== ''
+                || Boolean(element.querySelector(
+                    'img, video, iframe, pre, table, hr'
+                ));
+
+            element.classList.toggle('vhd-is-empty', !hasVisibleContent);
+        };
+
+        syncTextPlaceholder();
+
         element.addEventListener('focus', () => {
             this.textToolbar.setActiveEditable(element);
             this.textToolbar.show();
         });
 
         if (element.classList.contains('vhd-editable-text')) {
-            element.addEventListener('pointerdown', () => {
+            element.addEventListener('pointerdown', event => {
                 this.#hideSelectionMenu();
+
+                if (!element.classList.contains('vhd-is-empty')) {
+                    return;
+                }
+
+                event.preventDefault();
+                element.focus();
+
+                const caretTarget = element.firstElementChild || element;
+                const range = document.createRange();
+                range.selectNodeContents(caretTarget);
+                range.collapse(true);
+
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
             });
 
             element.addEventListener('keyup', event => {
@@ -4370,6 +4401,7 @@ export default class Editor {
 
         element.addEventListener('input', () => {
             this.#hideSelectionMenu();
+            syncTextPlaceholder();
             block[property] = element.innerHTML;
             this.#emit('change', {
                 source: 'content',
@@ -7388,6 +7420,7 @@ export default class Editor {
         if (block.type === 'text') {
             const text = document.createElement('div');
             text.className = 'vhd-editable-text';
+            text.dataset.placeholder = this.t.editor.textPlaceholder;
             text.innerHTML = block.content || '';
             this.#editable(text, block, 'content');
             wrapper.append(text);
@@ -7783,6 +7816,15 @@ export default class Editor {
                             )
                         );
                     });
+
+                    columnElement.append(
+                        this.#blockMenu(
+                            rowIndex,
+                            columnIndex,
+                            column.blocks.length,
+                            'end'
+                        )
+                    );
                 }
 
                 grid.append(columnElement);

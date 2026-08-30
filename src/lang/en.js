@@ -186,6 +186,7 @@ export default {
     },
     editor: {
         empty: 'Add a first row to start.',
+        textPlaceholder: 'Type your text here',
         addBlock: 'Add content',
         moveUp: 'Move up',
         dragBlock: 'Move block',

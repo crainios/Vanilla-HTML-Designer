@@ -162,6 +162,15 @@
     pointer-events: none;
 }
 
+.vhd-content blockquote[data-vhd-quote-marks="curly"]::before { content: "“"; }
+.vhd-content blockquote[data-vhd-quote-marks="curly"]::after { content: "”"; }
+.vhd-content blockquote[data-vhd-quote-marks="french"]::before { content: "«"; }
+.vhd-content blockquote[data-vhd-quote-marks="french"]::after { content: "»"; }
+.vhd-content blockquote[data-vhd-quote-marks="straight"]::before,
+.vhd-content blockquote[data-vhd-quote-marks="straight"]::after { content: '"'; }
+.vhd-content blockquote[data-vhd-quote-marks="none"]::before,
+.vhd-content blockquote[data-vhd-quote-marks="none"]::after { content: none; }
+
 .vhd-content blockquote > :first-child {
     margin-top: 0;
 }

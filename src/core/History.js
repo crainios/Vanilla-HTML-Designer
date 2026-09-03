@@ -6,6 +6,15 @@ export default class History {
     }
 
     push(state) {
+        const previous = this.past[this.past.length - 1];
+
+        if (
+            previous
+            && JSON.stringify(previous) === JSON.stringify(state)
+        ) {
+            return;
+        }
+
         this.past.push(structuredClone(state));
 
         if (this.past.length > this.limit) {

@@ -1753,6 +1753,31 @@
     pointer-events: none;
 }
 
+.vhd-editable-text blockquote[data-vhd-quote-marks="curly"]::before,
+.vhd-preview-content blockquote[data-vhd-quote-marks="curly"]::before,
+.vhd-content blockquote[data-vhd-quote-marks="curly"]::before { content: "“"; }
+.vhd-editable-text blockquote[data-vhd-quote-marks="curly"]::after,
+.vhd-preview-content blockquote[data-vhd-quote-marks="curly"]::after,
+.vhd-content blockquote[data-vhd-quote-marks="curly"]::after { content: "”"; }
+.vhd-editable-text blockquote[data-vhd-quote-marks="french"]::before,
+.vhd-preview-content blockquote[data-vhd-quote-marks="french"]::before,
+.vhd-content blockquote[data-vhd-quote-marks="french"]::before { content: "«"; }
+.vhd-editable-text blockquote[data-vhd-quote-marks="french"]::after,
+.vhd-preview-content blockquote[data-vhd-quote-marks="french"]::after,
+.vhd-content blockquote[data-vhd-quote-marks="french"]::after { content: "»"; }
+.vhd-editable-text blockquote[data-vhd-quote-marks="straight"]::before,
+.vhd-preview-content blockquote[data-vhd-quote-marks="straight"]::before,
+.vhd-content blockquote[data-vhd-quote-marks="straight"]::before,
+.vhd-editable-text blockquote[data-vhd-quote-marks="straight"]::after,
+.vhd-preview-content blockquote[data-vhd-quote-marks="straight"]::after,
+.vhd-content blockquote[data-vhd-quote-marks="straight"]::after { content: '"'; }
+.vhd-editable-text blockquote[data-vhd-quote-marks="none"]::before,
+.vhd-preview-content blockquote[data-vhd-quote-marks="none"]::before,
+.vhd-content blockquote[data-vhd-quote-marks="none"]::before,
+.vhd-editable-text blockquote[data-vhd-quote-marks="none"]::after,
+.vhd-preview-content blockquote[data-vhd-quote-marks="none"]::after,
+.vhd-content blockquote[data-vhd-quote-marks="none"]::after { content: none; }
+
 .vhd-editable-text blockquote > :first-child,
 .vhd-preview-content blockquote > :first-child,
 .vhd-content blockquote > :first-child {
@@ -1827,6 +1852,20 @@
 
 .vhd-property-action .vhd-secondary-button {
     width: 100%;
+}
+
+.vhd-property-action .vhd-choose-image-button {
+    border-color: var(--vhd-accent);
+    background: var(--vhd-accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+.vhd-property-action .vhd-choose-image-button:hover,
+.vhd-property-action .vhd-choose-image-button:focus-visible {
+    border-color: #1d4ed8;
+    background: #1d4ed8;
+    color: #fff;
 }
 
 

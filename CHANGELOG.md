@@ -1,3 +1,112 @@
+## [0.7.39] - 2026-09-03
+
+### Changed
+
+- The Choose image action in Image Properties is now displayed as a prominent blue primary button.
+
+## [0.7.38] - 2026-09-03
+
+### Changed
+
+- Images selected from a gallery now use their alternative text as the default Title when the gallery does not provide a non-empty `title` value.
+- An explicit non-empty gallery Title continues to take precedence.
+
+## [0.7.37] - 2026-09-03
+
+### Added
+
+- Image blocks and inline images now expose a separate Title property.
+- Image titles are stored in JSON, imported from HTML and exported as the HTML `title` attribute.
+- Image gallery callbacks may return a `title` value alongside `src` and `alt`.
+
+## [0.7.36] - 2026-09-03
+
+### Changed
+
+- List menu labels are now shorter and easier to scan.
+- Added a final Clear command that removes only the list formatting from the selection.
+
+## [0.7.35] - 2026-09-03
+
+### Fixed
+
+- Clearing formatting from a list selection no longer leaves empty list items or orphan bullets before and after the resulting plain text.
+- Non-empty list fragments outside a partial selection remain unchanged.
+
+## [0.7.34] - 2026-09-03
+
+### Fixed
+
+- Changing the style of an existing ordered or unordered list no longer toggles the list off.
+- List style changes are applied to every list covered by the selection and are synchronized immediately.
+
+## [0.7.33] - 2026-09-03
+
+### Fixed
+
+- Clear formatting now replaces the selection with plain text and normalizes its block format to a paragraph.
+- Headings, quotations, code blocks, links, inline elements and character styles are removed from the selected content.
+- Line breaks contained in a plain-text selection are preserved.
+
+## [0.7.32] - 2026-09-03
+
+### Fixed
+
+- Clear formatting now removes formatting only from the selected text instead of the complete editable document.
+- Clear formatting does nothing when there is no active text selection.
+
+## [0.7.31] - 2026-08-31
+
+### Fixed
+
+- Citation border thickness now preserves an explicit value of `0` when the Citation is deselected and selected again.
+
+## [0.7.30] - 2026-08-31
+
+### Fixed
+
+- Citation border thickness now changes only the top, right and bottom borders.
+- The emphasized left border keeps its dedicated default thickness.
+- Legacy inline `border-width` values are normalized when the Citation border thickness is changed.
+
+## [0.7.29] - 2026-08-31
+
+### Fixed
+
+- Centralized undo-history capture before editable content is synchronized back to the project model.
+- Undo and Redo now cover typing, paste, toolbar formatting, lists, links, embedded code, inline media and Citation formatting.
+- Native block, row and column Properties now create history entries before changing their values, including Citation background, border, indent and quotation marks.
+- Heading-level changes now explicitly create a history entry.
+- Duplicate consecutive history snapshots are ignored to prevent one user action from requiring multiple Undo clicks.
+
+### Audited
+
+- Verified history coverage for structural row/block operations, drag-and-drop, native and plugin Properties, table structure/cells/formatting, image resizing, search/replace and custom-action insertions.
+
+## [0.7.28] - 2026-08-31
+
+### Fixed
+
+- Insertions made through custom actions now create an undo-history entry before changing the active editable content.
+- Undo and Redo now cover custom-action `insert()` calls, content returned by a custom action and public `insertAtCursor()` calls.
+
+## [0.7.27] - 2026-08-31
+
+### Changed
+
+- Converting dashed lines to a list now removes the redundant leading dash and its following spaces from every generated list item.
+- Detection supports normal spaces, non-breaking spaces and common typographic dash characters.
+- Hyphens inside text and hyphenated words are left unchanged.
+
+## [0.7.26] - 2026-08-31
+
+### Added
+
+- Clicking a Citation inside a Text block now opens Citation-specific Properties.
+- Citation properties include background color, border color/width/style/radius, left indent and quotation-mark style.
+- Quotation-mark choices include ornamental, curly, French guillemets, straight quotes and none.
+- Citation settings are stored directly on the selected `<blockquote>` and are preserved in exported HTML.
+
 ## [0.7.25] - 2026-08-30
 
 ### Added

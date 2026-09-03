@@ -81,7 +81,8 @@ function listStyleIcon(styleType) {
         'lower-alpha': 'a b c',
         'upper-alpha': 'A B C',
         'lower-roman': 'i ii iii',
-        'upper-roman': 'I II III'
+        'upper-roman': 'I II III',
+        none: '×'
     };
     const example = examples[styleType] || examples.disc;
     const isBullet = ['disc', 'square', 'circle'].includes(styleType);
@@ -1074,12 +1075,142 @@ export default class TextToolbar {
     }
 
     #applyList(ordered, styleType) {
-        document.execCommand(
-            ordered ? 'insertOrderedList' : 'insertUnorderedList',
-            false,
-            null
-        );
+        const selection = window.getSelection();
 
+        if (!selection?.rangeCount) {
+            return;
+        }
+
+        const targetTag = ordered ? 'ol' : 'ul';
+        const range = selection.getRangeAt(0);
+        const segments = this.#selectionTextNodeSegments(range);
+        const selectedLists = new Set();
+
+        segments.forEach(({ node }) => {
+            const list = node.parentElement?.closest?.('ol,ul');
+
+            if (list && this.activeEditable?.contains(list)) {
+                selectedLists.add(list);
+            }
+        });
+
+        let anchor = selection.anchorNode;
+
+        if (anchor?.nodeType === Node.TEXT_NODE) {
+            anchor = anchor.parentElement;
+        }
+
+        const anchorList = anchor?.closest?.('ol,ul');
+
+        if (anchorList && this.activeEditable?.contains(anchorList)) {
+            selectedLists.add(anchorList);
+        }
+
+        const selectionAlreadyUsesTargetList = selectedLists.size > 0
+            && [...selectedLists].every(list =>
+                list.tagName.toLowerCase() === targetTag
+            )
+            && (
+                range.collapsed
+                || segments.every(({ node }) =>
+                    node.parentElement?.closest?.('ol,ul')
+                        ?.tagName.toLowerCase() === targetTag
+                )
+            );
+
+        if (!selectionAlreadyUsesTargetList) {
+            document.execCommand(
+                ordered ? 'insertOrderedList' : 'insertUnorderedList',
+                false,
+                null
+            );
+
+            selectedLists.clear();
+
+            if (selection.rangeCount) {
+                this.#selectionTextNodeSegments(selection.getRangeAt(0))
+                    .forEach(({ node }) => {
+                        const list = node.parentElement?.closest?.(targetTag);
+
+                        if (list && this.activeEditable?.contains(list)) {
+                            selectedLists.add(list);
+                        }
+                    });
+            }
+
+            anchor = selection.anchorNode;
+
+            if (anchor?.nodeType === Node.TEXT_NODE) {
+                anchor = anchor.parentElement;
+            }
+
+            const convertedList = anchor?.closest?.(targetTag);
+
+            if (convertedList && this.activeEditable?.contains(convertedList)) {
+                selectedLists.add(convertedList);
+            }
+        }
+
+        let changed = false;
+
+        selectedLists.forEach(list => {
+            if (list.tagName.toLowerCase() !== targetTag) {
+                return;
+            }
+
+            if (list.style.listStyleType !== styleType) {
+                changed = true;
+            }
+
+            list.style.listStyleType = styleType;
+            changed = this.#removeLeadingListDashes(list) || changed;
+        });
+
+        if (changed || !selectionAlreadyUsesTargetList) {
+            this.activeEditable?.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                inputType: 'formatList',
+                data: styleType
+            }));
+        }
+    }
+
+    #removeLeadingListDashes(list) {
+        let changed = false;
+
+        list.querySelectorAll(':scope > li').forEach(item => {
+            const walker = document.createTreeWalker(
+                item,
+                NodeFilter.SHOW_TEXT
+            );
+            let textNode = walker.nextNode();
+            const leadingWhitespaceNodes = [];
+
+            while (textNode && !textNode.data.trim()) {
+                leadingWhitespaceNodes.push(textNode);
+                textNode = walker.nextNode();
+            }
+
+            if (!textNode) {
+                return;
+            }
+
+            const cleaned = textNode.data.replace(
+                /^[\s\u00a0]*[-‐‑‒–—][\s\u00a0]+/u,
+                ''
+            );
+
+            if (cleaned !== textNode.data) {
+                leadingWhitespaceNodes.forEach(node => node.remove());
+                textNode.data = cleaned;
+                changed = true;
+            }
+        });
+
+        return changed;
+    }
+
+    #clearListFormatting() {
         const selection = window.getSelection();
 
         if (!selection?.rangeCount) {
@@ -1092,11 +1223,33 @@ export default class TextToolbar {
             node = node.parentElement;
         }
 
-        const list = node?.closest?.(ordered ? 'ol' : 'ul');
+        let list = node?.closest?.('ol,ul');
 
-        if (list) {
-            list.style.listStyleType = styleType;
+        if (!list && !selection.isCollapsed) {
+            const segment = this.#selectionTextNodeSegments(
+                selection.getRangeAt(0)
+            ).find(({ node }) => node.parentElement?.closest?.('ol,ul'));
+
+            list = segment?.node.parentElement?.closest?.('ol,ul');
         }
+
+        if (!list || !this.activeEditable?.contains(list)) {
+            return;
+        }
+
+        document.execCommand(
+            list.tagName === 'OL'
+                ? 'insertOrderedList'
+                : 'insertUnorderedList',
+            false,
+            null
+        );
+
+        this.activeEditable.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: 'formatList',
+            data: null
+        }));
     }
 
 
@@ -1107,24 +1260,178 @@ export default class TextToolbar {
             return;
         }
 
-        const plainText = editable.innerText;
+        if (!this.#restoreSelection()) {
+            return;
+        }
 
-        editable.replaceChildren(document.createTextNode(plainText));
+        const selection = window.getSelection();
+
+        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+            return;
+        }
+
+        const range = selection.getRangeAt(0);
+
+        if (!editable.contains(range.commonAncestorContainer)) {
+            return;
+        }
+
+        const plainText = selection.toString();
+        const lines = plainText.replace(/\r\n?/g, '\n').split('\n');
+
+        if (/^H[1-6]$/.test(editable.tagName)) {
+            const container = document.createElement('div');
+            const beforeRange = range.cloneRange();
+            const afterRange = range.cloneRange();
+
+            beforeRange.selectNodeContents(editable);
+            beforeRange.setEnd(range.startContainer, range.startOffset);
+            container.append(beforeRange.cloneContents());
+            const beforeHtml = container.innerHTML;
+
+            container.replaceChildren();
+            afterRange.selectNodeContents(editable);
+            afterRange.setStart(range.endContainer, range.endOffset);
+            container.append(afterRange.cloneContents());
+
+            if (this.#runExternalFormattingCommand('clearFormatting', {
+                plainText,
+                beforeHtml,
+                afterHtml: container.innerHTML
+            })) {
+                return;
+            }
+        }
+
+        const fragment = document.createDocumentFragment();
+        const insertedNodes = [];
+
+        lines.forEach((line, index) => {
+            if (index > 0) {
+                const breakElement = document.createElement('br');
+                fragment.append(breakElement);
+                insertedNodes.push(breakElement);
+            }
+
+            if (line) {
+                const textNode = document.createTextNode(line);
+                fragment.append(textNode);
+                insertedNodes.push(textNode);
+            }
+        });
+
+        const structuralSelector = [
+            'h1',
+            'h2',
+            'h3',
+            'h4',
+            'h5',
+            'h6',
+            'blockquote',
+            'pre',
+            'code',
+            'ol',
+            'ul',
+            'li',
+            'p[style]',
+            'p[class]',
+            'div[style]',
+            'div[class]'
+        ].join(',');
+        const structuralElement = [...editable.querySelectorAll(structuralSelector)]
+            .find(element => {
+                try {
+                    return range.intersectsNode(element);
+                } catch {
+                    return false;
+                }
+            });
+
+        let resultRange = document.createRange();
+
+        if (structuralElement) {
+            const beforeRange = range.cloneRange();
+            const afterRange = range.cloneRange();
+            beforeRange.selectNodeContents(editable);
+            beforeRange.setEnd(range.startContainer, range.startOffset);
+            afterRange.selectNodeContents(editable);
+            afterRange.setStart(range.endContainer, range.endOffset);
+
+            const before = beforeRange.cloneContents();
+            const after = afterRange.cloneContents();
+            const removeEmptyListBoundary = (content, edge) => {
+                let node = edge === 'start'
+                    ? content.firstChild
+                    : content.lastChild;
+
+                while (node?.childNodes?.length) {
+                    node = edge === 'start'
+                        ? node.firstChild
+                        : node.lastChild;
+                }
+
+                const element = node?.nodeType === Node.ELEMENT_NODE
+                    ? node
+                    : node?.parentElement;
+                const item = element?.closest?.('li');
+
+                if (
+                    !(item instanceof HTMLLIElement)
+                    || item.textContent.trim()
+                    || item.querySelector('img,video,iframe,table,hr')
+                ) {
+                    return;
+                }
+
+                let parent = item.parentElement;
+                item.remove();
+
+                while (
+                    parent
+                    && ['OL', 'UL'].includes(parent.tagName)
+                    && !parent.querySelector('li')
+                ) {
+                    const nextParent = parent.parentElement;
+                    parent.remove();
+                    parent = nextParent;
+                }
+            };
+
+            removeEmptyListBoundary(before, 'end');
+            removeEmptyListBoundary(after, 'start');
+
+            const paragraph = document.createElement('p');
+            paragraph.append(fragment);
+
+            if (!paragraph.childNodes.length) {
+                paragraph.append(document.createElement('br'));
+            }
+
+            editable.replaceChildren(before, paragraph, after);
+            resultRange.selectNodeContents(paragraph);
+        } else {
+            range.deleteContents();
+            range.insertNode(fragment);
+
+            if (insertedNodes.length) {
+                resultRange.setStartBefore(insertedNodes[0]);
+                resultRange.setEndAfter(insertedNodes.at(-1));
+            } else {
+                resultRange.setStart(range.startContainer, range.startOffset);
+                resultRange.collapse(true);
+            }
+        }
+
+        selection.removeAllRanges();
+        selection.addRange(resultRange);
+        this.savedRange = resultRange.cloneRange();
+
         editable.dispatchEvent(new InputEvent('input', {
             bubbles: true,
             inputType: 'formatRemove',
             data: null
         }));
-
-        const range = document.createRange();
-        range.selectNodeContents(editable);
-        range.collapse(false);
-
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-
-        editable.focus();
+        this.#keepSelection();
     }
 
     #applyIndent(command) {
@@ -2329,6 +2636,11 @@ export default class TextToolbar {
                     label: this.t.toolbar.orderedUpperRoman,
                     icon: listStyleIcon('upper-roman'),
                     action: () => this.#applyList(true, 'upper-roman')
+                },
+                {
+                    label: this.t.toolbar.clearList,
+                    icon: listStyleIcon('none'),
+                    action: () => this.#clearListFormatting()
                 }
             ],
             'list'

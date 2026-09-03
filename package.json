@@ -1,6 +1,6 @@
 {
   "name": "vanilla-html-designer",
-  "version": "0.7.25",
+  "version": "0.7.39",
   "type": "module",
   "description": "Lightweight visual HTML content designer written in Vanilla JavaScript",
   "license": "AGPL-3.0",

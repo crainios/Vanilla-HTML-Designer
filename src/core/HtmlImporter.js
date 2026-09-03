@@ -153,6 +153,7 @@ function createImageBlock(element) {
     const block = BlockFactory.create('image');
     block.src = image.getAttribute('src') || '';
     block.alt = image.getAttribute('alt') || '';
+    block.title = image.getAttribute('title') || '';
 
     const caption = element.tagName === 'FIGURE'
         ? element.querySelector('figcaption')

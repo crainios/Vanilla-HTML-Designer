@@ -81,8 +81,11 @@ function serializeBlock(block) {
             const caption = block.caption
                 ? `<figcaption>${escapeText(block.caption)}</figcaption>`
                 : '';
+            const title = block.title
+                ? ` title="${escapeAttribute(block.title)}"`
+                : '';
 
-            return `<figure class="vhd-image"><img src="${escapeAttribute(block.src)}" alt="${escapeAttribute(block.alt)}" style="${imageStyle}">${caption}</figure>`;
+            return `<figure class="vhd-image"><img src="${escapeAttribute(block.src)}" alt="${escapeAttribute(block.alt)}"${title} style="${imageStyle}">${caption}</figure>`;
         }
 
         case 'button': {

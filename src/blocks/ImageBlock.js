@@ -9,6 +9,7 @@ export default function createImageBlock() {
         },
         src: '',
         alt: '',
+        title: '',
         caption: ''
     };
 }

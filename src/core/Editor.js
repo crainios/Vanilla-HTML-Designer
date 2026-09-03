@@ -242,7 +242,8 @@ export default class Editor {
 
         const selected = {
             src: String(image.src),
-            alt: String(image.alt ?? '')
+            alt: String(image.alt ?? ''),
+            title: String(image.title || image.alt || '')
         };
 
         const pending = this.pendingImageTarget;
@@ -252,6 +253,7 @@ export default class Editor {
             this.#remember();
             pending.block.src = selected.src;
             pending.block.alt = selected.alt;
+            pending.block.title = selected.title;
             this.#closeImageGallery();
             this.render();
             return true;
@@ -267,6 +269,7 @@ export default class Editor {
         const imageElement = document.createElement('img');
         imageElement.src = selected.src;
         imageElement.alt = selected.alt;
+        imageElement.title = selected.title;
         imageElement.className = 'vhd-inline-image';
         imageElement.dataset.align = 'left';
         imageElement.dataset.size = '33';
@@ -1366,13 +1369,19 @@ export default class Editor {
             input.checked = Boolean(value);
             input.addEventListener(
                 'change',
-                () => onInput(input.checked, input)
+                () => {
+                    this.#remember();
+                    onInput(input.checked, input);
+                }
             );
         } else {
             input.value = value;
             input.addEventListener(
                 'input',
-                () => onInput(input.value, input)
+                () => {
+                    this.#remember();
+                    onInput(input.value, input);
+                }
             );
         }
 
@@ -1380,13 +1389,15 @@ export default class Editor {
         return field;
     }
 
-    #propertyAction(label, onClick) {
+    #propertyAction(label, onClick, buttonClass = '') {
         const field = document.createElement('div');
         field.className = 'vhd-property-action';
 
         const button = document.createElement('button');
         button.type = 'button';
-        button.className = 'vhd-secondary-button';
+        button.className = ['vhd-secondary-button', buttonClass]
+            .filter(Boolean)
+            .join(' ');
         button.textContent = label;
         button.addEventListener('click', onClick);
 
@@ -1834,6 +1845,12 @@ export default class Editor {
 
                         target.src = String(selected.src);
                         target.alt = String(selected.alt ?? target.alt ?? '');
+                        target.title = String(
+                            selected.title
+                            || selected.alt
+                            || target.title
+                            || ''
+                        );
                         updateImagePreview();
 
                         sourceInput.value = target.src;
@@ -1842,7 +1859,12 @@ export default class Editor {
                         if (altInput) {
                             altInput.value = target.alt;
                         }
-                    })
+
+                        const titleInput = panel.querySelector('[data-vhd-property="image-title"]');
+                        if (titleInput) {
+                            titleInput.value = target.title;
+                        }
+                    }, 'vhd-choose-image-button')
                 );
             }
 
@@ -1858,6 +1880,19 @@ export default class Editor {
             );
             altField.querySelector('input').dataset.vhdProperty = 'image-alt';
             fields.push(altField);
+
+            const titleField = this.#propertyField(
+                this.t.editor.imageTitle,
+                'text',
+                target.title || '',
+                value => {
+                    target.title = value;
+                    const img = element.querySelector('.vhd-image-editor img');
+                    if (img) img.title = value;
+                }
+            );
+            titleField.querySelector('input').dataset.vhdProperty = 'image-title';
+            fields.push(titleField);
 
             fields.push(
                 (() => {
@@ -2258,6 +2293,74 @@ export default class Editor {
                 )
             );
         }
+    }
+
+    #selectQuoteProperties(quote, block, editable) {
+        const panel = this.propertiesPanel;
+        panel.replaceChildren(
+            this.#createDocumentStatistics(),
+            this.#createStatusMessage()
+        );
+        this.#updateDocumentStatistics();
+        this.#updateStatusMessage();
+
+        const title = document.createElement('h3');
+        title.textContent = this.t.properties.quote;
+        panel.append(title);
+
+        const update = callback => value => {
+            callback(value);
+            block.content = editable.innerHTML;
+            this.#emit('change', {
+                source: 'quote:property',
+                blockId: block.id
+            });
+        };
+
+        const quoteBorderWidth = Number.parseFloat(
+            quote.style.borderTopWidth || quote.style.borderWidth
+        );
+
+        panel.append(
+            this.#propertyField(this.t.properties.quoteBackground, 'color', quote.style.backgroundColor || '#f7f8fa', update(value => {
+                quote.style.backgroundColor = value;
+            })),
+            this.#propertyField(this.t.properties.quoteBorderColor, 'color', quote.style.borderColor || '#d8dde5', update(value => {
+                quote.style.borderColor = value;
+            })),
+            this.#propertyField(this.t.properties.quoteBorderWidth, 'number', Number.isFinite(quoteBorderWidth) ? quoteBorderWidth : 1, update(value => {
+                const width = `${Math.max(0, Number(value))}px`;
+
+                quote.style.removeProperty('border-width');
+                quote.style.borderTopWidth = width;
+                quote.style.borderRightWidth = width;
+                quote.style.borderBottomWidth = width;
+                quote.style.removeProperty('border-left-width');
+            }), { min: 0, max: 20, step: 1 }),
+            this.#propertyField(this.t.properties.quoteBorderStyle, 'select', quote.style.borderStyle || 'solid', update(value => {
+                quote.style.borderStyle = value;
+            }), [
+                ['solid', this.t.properties.borderSolid],
+                ['dashed', this.t.properties.borderDashed],
+                ['dotted', this.t.properties.borderDotted],
+                ['none', this.t.properties.borderNone]
+            ]),
+            this.#propertyField(this.t.properties.borderRadius, 'number', Number.parseFloat(quote.style.borderRadius) || 6, update(value => {
+                quote.style.borderRadius = `${Math.max(0, Number(value))}px`;
+            }), { min: 0, max: 100, step: 1 }),
+            this.#propertyField(this.t.properties.quoteIndent, 'number', Number.parseFloat(quote.style.marginLeft) || 32, update(value => {
+                quote.style.marginLeft = `${Math.max(0, Number(value))}px`;
+            }), { min: 0, max: 300, step: 1 }),
+            this.#propertyField(this.t.properties.quoteMarks, 'select', quote.dataset.vhdQuoteMarks || 'ornamental', update(value => {
+                quote.dataset.vhdQuoteMarks = value;
+            }), [
+                ['ornamental', '❝ … ❞'],
+                ['curly', '“ … ”'],
+                ['french', '« … »'],
+                ['straight', '" … "'],
+                ['none', this.t.properties.quoteMarksNone]
+            ])
+        );
     }
 
     #rememberPropertyChange() {
@@ -3771,6 +3874,15 @@ export default class Editor {
                 }
             ),
             this.#propertyField(
+                this.t.properties.imageTitle,
+                'text',
+                image.getAttribute('title') || '',
+                value => {
+                    image.title = value;
+                    this.#syncInlineImage(image);
+                }
+            ),
+            this.#propertyField(
                 this.t.properties.align,
                 'select',
                 image.dataset.align || 'left',
@@ -4361,6 +4473,14 @@ export default class Editor {
                 return;
             }
 
+            const quote = event.target.closest?.('blockquote');
+
+            if (quote && element.contains(quote)) {
+                event.stopPropagation();
+                this.#selectQuoteProperties(quote, block, element);
+                return;
+            }
+
             this.#removeInlineImageResizeOverlay();
             this.root.querySelectorAll(
                 '.vhd-inline-image.is-selected'
@@ -4378,6 +4498,7 @@ export default class Editor {
                 return;
             }
 
+            this.#remember();
             block[property] = element.innerHTML;
             block.level = level;
 
@@ -4402,6 +4523,7 @@ export default class Editor {
         element.addEventListener('input', () => {
             this.#hideSelectionMenu();
             syncTextPlaceholder();
+            this.#remember();
             block[property] = element.innerHTML;
             this.#emit('change', {
                 source: 'content',
@@ -5190,6 +5312,106 @@ export default class Editor {
     }
 
     #formatContextualSelection(command, value = null) {
+        if (command === 'clearFormatting') {
+            const editable = this.textToolbar.activeEditable;
+            const wrapper = editable?.closest?.('.vhd-block');
+            const rowIndex = Number(wrapper?.dataset.rowIndex);
+            const columnIndex = Number(wrapper?.dataset.columnIndex);
+            const blockIndex = Number(wrapper?.dataset.blockIndex);
+            const blocks = this.project?.rows?.[rowIndex]
+                ?.columns?.[columnIndex]?.blocks;
+            const block = blocks?.[blockIndex];
+
+            if (
+                !(editable instanceof HTMLElement)
+                || !/^H[1-6]$/.test(editable.tagName)
+                || block?.type !== 'heading'
+                || !value
+            ) {
+                return false;
+            }
+
+            const hasText = html => {
+                const container = document.createElement('div');
+                container.innerHTML = String(html ?? '');
+                return container.textContent.length > 0;
+            };
+            const paragraph = document.createElement('p');
+            const lines = String(value.plainText ?? '')
+                .replace(/\r\n?/g, '\n')
+                .split('\n');
+
+            lines.forEach((line, index) => {
+                if (index > 0) {
+                    paragraph.append(document.createElement('br'));
+                }
+
+                if (line) {
+                    paragraph.append(document.createTextNode(line));
+                }
+            });
+
+            if (!paragraph.childNodes.length) {
+                paragraph.append(document.createElement('br'));
+            }
+
+            const replacements = [];
+
+            if (hasText(value.beforeHtml)) {
+                replacements.push({
+                    ...structuredClone(block),
+                    id: `block-${crypto.randomUUID()}`,
+                    content: value.beforeHtml
+                });
+            }
+
+            const textBlock = {
+                id: `block-${crypto.randomUUID()}`,
+                type: 'text',
+                properties: {},
+                content: paragraph.outerHTML
+            };
+            const selectedBlockIndex = blockIndex + replacements.length;
+            replacements.push(textBlock);
+
+            if (hasText(value.afterHtml)) {
+                replacements.push({
+                    ...structuredClone(block),
+                    id: `block-${crypto.randomUUID()}`,
+                    content: value.afterHtml
+                });
+            }
+
+            this.#remember();
+            blocks.splice(blockIndex, 1, ...replacements);
+            this.render();
+
+            requestAnimationFrame(() => {
+                const selectedWrapper = this.canvas.querySelector(
+                    `.vhd-block[data-row-index="${rowIndex}"]`
+                    + `[data-column-index="${columnIndex}"]`
+                    + `[data-block-index="${selectedBlockIndex}"]`
+                );
+                const selectedEditable = selectedWrapper?.querySelector(
+                    '.vhd-editable-text'
+                );
+
+                if (!(selectedEditable instanceof HTMLElement)) {
+                    return;
+                }
+
+                const range = document.createRange();
+                range.selectNodeContents(selectedEditable);
+                const selection = window.getSelection();
+                selection?.removeAllRanges();
+                selection?.addRange(range);
+                selectedEditable.focus();
+                this.textToolbar.setActiveEditable(selectedEditable);
+            });
+
+            return true;
+        }
+
         const selectedImage = this.root.querySelector(
             '.vhd-inline-image.is-selected'
         );
@@ -7263,6 +7485,7 @@ export default class Editor {
         const image = document.createElement('img');
         image.src = block.src;
         image.alt = block.alt || '';
+        image.title = block.title || '';
         image.draggable = false;
         image.style.width = '100%';
         image.style.borderRadius = `${block.properties?.borderRadius ?? 4}px`;

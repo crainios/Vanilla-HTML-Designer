@@ -9,7 +9,7 @@ const editor = new HtmlDesigner(selectorOrElement, options);
 Options:
 
 - `translations`: partial or complete translation object.
-- `onImageSelect`: async callback returning `{ src, alt }`.
+- `onImageSelect`: async callback returning `{ src, alt, title }`. When `title` is omitted or empty, the `alt` value is used by default.
 
 ## getData()
 

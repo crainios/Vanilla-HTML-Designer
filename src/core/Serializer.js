@@ -45,7 +45,13 @@ function serializeBlock(block) {
     switch (block.type) {
         case 'heading': {
             const level = Math.min(6, Math.max(1, Number(block.level) || 2));
-            return `<h${level}>${block.content ?? ''}</h${level}>`;
+            const textAlign = ['left', 'center', 'right', 'justify'].includes(
+                block.properties?.textAlign
+            )
+                ? block.properties.textAlign
+                : 'left';
+
+            return `<h${level} style="text-align:${textAlign}">${block.content ?? ''}</h${level}>`;
         }
 
         case 'text':

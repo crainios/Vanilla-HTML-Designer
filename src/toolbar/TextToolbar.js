@@ -2,6 +2,18 @@ import { VERSION } from '../version.js';
 import emojiCategories from './EmojiData.js';
 import specialCharacterCategories from './SpecialCharacterData.js';
 
+function brandLogoIcon() {
+    return `
+        <svg class="vhd-brand-logo" viewBox="0 0 72 48" aria-hidden="true" focusable="false">
+            <rect x="1" y="1" width="70" height="46" rx="12" fill="#111827" stroke="#312e81" stroke-width="2"></rect>
+            <path d="M18 11 7 24l11 13" fill="none" stroke="#ff3cac" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M27 15 35 34l8-19" fill="none" stroke="#8b5cf6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M51 18 47 31" fill="none" stroke="#00e5ff" stroke-width="4" stroke-linecap="round"></path>
+            <path d="M55 11 66 24 55 37" fill="none" stroke="#ffb000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+    `;
+}
+
 function indentIcon(type) {
     const arrow = type === 'outdent'
         ? '<path d="M10 9 6 12l4 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
@@ -2209,14 +2221,7 @@ export default class TextToolbar {
 
             const logo = document.createElement('div');
             logo.className = 'vhd-about-logo';
-            logo.innerHTML = `
-                <svg viewBox="0 0 64 40" aria-hidden="true" focusable="false">
-                    <path d="M14 8 4 20l10 12"></path>
-                    <path d="M24 13 32 28l8-15"></path>
-                    <path d="M48 17 44 28"></path>
-                    <path d="M50 8 60 20 50 32"></path>
-                </svg>
-            `;
+            logo.innerHTML = brandLogoIcon();
 
             const title = document.createElement('h2');
             title.textContent = 'Vanilla HTML Designer';
@@ -2723,14 +2728,7 @@ export default class TextToolbar {
         versionBadge.className = 'vhd-version-badge';
         versionBadge.title = 'À propos de Vanilla HTML Designer';
         versionBadge.setAttribute('aria-label', 'À propos de Vanilla HTML Designer');
-        versionBadge.innerHTML = `
-            <svg viewBox="0 0 64 40" aria-hidden="true" focusable="false">
-                <path d="M14 8 4 20l10 12"></path>
-                <path d="M24 13 32 28l8-15"></path>
-                <path d="M48 17 44 28"></path>
-                <path d="M50 8 60 20 50 32"></path>
-            </svg>
-        `;
+        versionBadge.innerHTML = brandLogoIcon();
         versionBadge.addEventListener('click', () => this.#showAboutDialog());
 
         this.element.append(

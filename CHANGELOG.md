@@ -1,3 +1,20 @@
+## [0.7.41] - 2026-09-05
+
+### Fixed
+
+- Heading alignment is now stored in project data, restored in the editor and included in exported HTML.
+- Centred, right-aligned and justified headings therefore keep their alignment in published pages.
+
+## [0.7.40] - 2026-09-04
+
+### Changed
+
+- The Vanilla HTML Designer logo in the toolbar and About dialog now uses a vivid multicolour design.
+
+### Added
+
+- Added the colourful brand logo as a standalone reusable SVG asset.
+
 ## [0.7.39] - 2026-09-03
 
 ### Changed

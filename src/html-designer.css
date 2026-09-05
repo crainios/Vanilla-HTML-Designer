@@ -1599,19 +1599,15 @@
 
 .vhd-version-badge:hover,
 .vhd-version-badge:focus-visible {
-    color: var(--vhd-accent);
-    border-color: var(--vhd-accent);
+    border-color: #8b5cf6;
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, .18), 0 3px 10px rgba(255, 60, 172, .2);
     outline: none;
 }
 
-.vhd-version-badge svg {
-    width: 28px;
-    height: 18px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2.5;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+.vhd-version-badge .vhd-brand-logo {
+    width: 31px;
+    height: 21px;
+    filter: drop-shadow(0 1px 2px rgba(17, 24, 39, .25));
 }
 
 .vhd-about-dialog {
@@ -1640,14 +1636,10 @@
     color: var(--vhd-accent, #2563eb);
 }
 
-.vhd-about-logo svg {
+.vhd-about-logo .vhd-brand-logo {
     width: 72px;
-    height: 45px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 2.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+    height: 48px;
+    filter: drop-shadow(0 5px 8px rgba(139, 92, 246, .28));
 }
 
 .vhd-about-content h2 {

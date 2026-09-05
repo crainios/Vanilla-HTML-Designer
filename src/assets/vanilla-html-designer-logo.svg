@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 48" role="img" aria-labelledby="title description">
+    <title id="title">Vanilla HTML Designer</title>
+    <desc id="description">A vivid multicolour code symbol on a dark rounded background.</desc>
+    <rect x="1" y="1" width="70" height="46" rx="12" fill="#111827" stroke="#312e81" stroke-width="2"/>
+    <path d="M18 11 7 24l11 13" fill="none" stroke="#ff3cac" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M27 15 35 34l8-19" fill="none" stroke="#8b5cf6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M51 18 47 31" fill="none" stroke="#00e5ff" stroke-width="4" stroke-linecap="round"/>
+    <path d="M55 11 66 24 55 37" fill="none" stroke="#ffb000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

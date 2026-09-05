@@ -138,6 +138,11 @@ function createHeadingBlock(element) {
     const block = BlockFactory.create('heading');
     block.level = Number(element.tagName.slice(1)) || 2;
     block.content = element.innerHTML;
+
+    if (['left', 'center', 'right', 'justify'].includes(element.style.textAlign)) {
+        block.properties.textAlign = element.style.textAlign;
+    }
+
     return block;
 }
 

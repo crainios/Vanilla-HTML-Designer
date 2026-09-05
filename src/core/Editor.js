@@ -4504,6 +4504,11 @@ export default class Editor {
 
             const replacement = document.createElement(`h${level}`);
             replacement.innerHTML = block[property] || '';
+            replacement.style.textAlign = ['left', 'center', 'right', 'justify'].includes(
+                element.style.textAlign
+            )
+                ? element.style.textAlign
+                : 'left';
             this.#editable(replacement, block, property);
             element.replaceWith(replacement);
 
@@ -4524,6 +4529,16 @@ export default class Editor {
             this.#hideSelectionMenu();
             syncTextPlaceholder();
             this.#remember();
+
+            if (block.type === 'heading') {
+                const textAlign = element.style.textAlign;
+
+                if (['left', 'center', 'right', 'justify'].includes(textAlign)) {
+                    block.properties ??= {};
+                    block.properties.textAlign = textAlign;
+                }
+            }
+
             block[property] = element.innerHTML;
             this.#emit('change', {
                 source: 'content',
@@ -4550,6 +4565,15 @@ export default class Editor {
                 || !this.selectionMenu.contains(event.relatedTarget)
             ) {
                 this.#hideSelectionMenu();
+            }
+
+            if (block.type === 'heading') {
+                const textAlign = element.style.textAlign;
+
+                if (['left', 'center', 'right', 'justify'].includes(textAlign)) {
+                    block.properties ??= {};
+                    block.properties.textAlign = textAlign;
+                }
             }
 
             block[property] = element.innerHTML;
@@ -7636,6 +7660,11 @@ export default class Editor {
         if (block.type === 'heading') {
             const heading = document.createElement(`h${block.level || 2}`);
             heading.innerHTML = block.content || '';
+            heading.style.textAlign = ['left', 'center', 'right', 'justify'].includes(
+                block.properties?.textAlign
+            )
+                ? block.properties.textAlign
+                : 'left';
             this.#editable(heading, block, 'content');
             wrapper.append(heading);
         }

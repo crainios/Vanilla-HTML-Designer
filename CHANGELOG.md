@@ -1,3 +1,16 @@
+## [0.7.43] - 2026-09-20
+
+### Fixed
+
+- Inline-image widths are now rounded to whole percentages during mouse resizing and when existing image settings are normalised.
+
+## [0.7.42] - 2026-09-20
+
+### Fixed
+
+- Images restored inside editable text can once again be selected to open the Inline image Properties panel, even when their internal editor class is absent.
+- A linked inline image now keeps priority over its surrounding link when clicked, so its image properties remain accessible.
+
 ## [0.7.41] - 2026-09-05
 
 ### Fixed

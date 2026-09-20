@@ -3564,10 +3564,10 @@ export default class Editor {
         const align = ['left', 'center', 'right'].includes(image.dataset.align)
             ? image.dataset.align
             : 'left';
-        const size = Math.min(
+        const size = Math.round(Math.min(
             100,
             Math.max(1, Number(image.dataset.size || 33))
-        );
+        ));
         const spacing = Math.max(
             0,
             Number(image.dataset.spacing || 0)
@@ -3738,8 +3738,7 @@ export default class Editor {
                         )
                     );
 
-                    image.dataset.size =
-                        String(Math.round(percent * 10) / 10);
+                    image.dataset.size = String(Math.round(percent));
 
                     this.#applyInlineImageStyles(image);
                     updateGeometry();
@@ -3942,6 +3941,8 @@ export default class Editor {
         this.root.querySelectorAll('.vhd-inline-image.is-selected').forEach(item => item.classList.remove('is-selected'));
         this.root.querySelectorAll('.vhd-selected').forEach(item => item.classList.remove('vhd-selected'));
 
+        /* Restored/imported inline images may no longer carry the editor class. */
+        image.classList.add('vhd-inline-image');
         image.classList.add('is-selected');
 
         if (!image.dataset.align) {
@@ -4437,7 +4438,7 @@ export default class Editor {
         });
 
         element.addEventListener('pointerdown', event => {
-            const image = event.target.closest?.('.vhd-inline-image');
+            const image = event.target.closest?.('img');
 
             if (
                 image
@@ -4454,6 +4455,16 @@ export default class Editor {
         });
 
         element.addEventListener('click', event => {
+            const image = event.target.closest?.('img');
+
+            if (image && element.contains(image)) {
+                event.preventDefault();
+                event.stopPropagation();
+                this.textToolbar.setActiveEditable(element);
+                this.#selectInlineImage(image);
+                return;
+            }
+
             const link = event.target.closest?.('a');
 
             if (link && element.contains(link)) {
@@ -4461,15 +4472,6 @@ export default class Editor {
                 event.stopPropagation();
                 this.textToolbar.setActiveEditable(element);
                 this.#selectInlineLink(link);
-                return;
-            }
-
-            const image = event.target.closest?.('.vhd-inline-image');
-
-            if (image && element.contains(image)) {
-                event.preventDefault();
-                event.stopPropagation();
-                this.#selectInlineImage(image);
                 return;
             }
 

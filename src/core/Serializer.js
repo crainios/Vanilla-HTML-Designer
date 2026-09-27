@@ -1,4 +1,5 @@
 import BlockFactory from '../blocks/BlockFactory.js';
+import { sanitizeHtml } from './HtmlSanitizer.js';
 
 function escapeAttribute(value = '') {
     return String(value)
@@ -292,6 +293,9 @@ function serializeBlock(block) {
             const height = Math.max(0, Math.min(500, Number(block.height) || 0));
             return `<div class="vhd-spacer" style="height:${height}px" aria-hidden="true"></div>`;
         }
+
+        case 'raw-html':
+            return `<div class="vhd-raw-html" data-vhd-block="raw-html">${sanitizeHtml(block.html)}</div>`;
 
         default:
             return '';

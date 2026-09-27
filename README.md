@@ -52,6 +52,7 @@ Each row can use a different layout without affecting the others.
 - Button block
 - Divider block
 - Spacer block
+- Secure Free HTML block
 - Plain-text paste sanitization (external HTML/styles are discarded)
 - Rich-text formatting:
   - paragraphs
@@ -72,6 +73,32 @@ Each row can use a different layout without affecting the others.
 - External image-picker hook
 - English and French interface
 - No framework and no build tool required
+
+## Secure Free HTML block
+
+The native **Free HTML** content block accepts custom HTML while keeping the
+editor and generated page protected. Its source remains editable in the JSON
+project, but the preview and exported markup always use a sanitised copy.
+
+The block removes scripts, embedded styles, forms, event-handler attributes,
+unsafe URLs, dangerous positioning rules and unapproved iframe sources. Its
+editor preview is rendered inside an iframe without script permissions.
+
+Generated markup is wrapped so it can be recognised when HTML is imported
+again:
+
+```html
+<div class="vhd-raw-html" data-vhd-block="raw-html">
+    <!-- sanitised custom HTML -->
+</div>
+```
+
+The block can be hidden from the content menu when an integration does not
+need it:
+
+```js
+disabledContentBlocks: ['raw-html']
+```
 
 ## Project structure
 

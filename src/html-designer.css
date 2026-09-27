@@ -1095,15 +1095,54 @@
 }
 
 .vhd-property-field input,
-.vhd-property-field select {
+.vhd-property-field select,
+.vhd-property-field textarea {
     width: 100%;
     min-width: 0;
-    height: 32px;
     padding: 4px 6px;
     border: 1px solid var(--vhd-border);
     border-radius: 5px;
     background: #fff;
     color: #1f2937;
+}
+
+.vhd-property-field input,
+.vhd-property-field select {
+    height: 32px;
+}
+
+.vhd-property-field textarea {
+    min-height: 220px;
+    resize: vertical;
+    font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    tab-size: 4;
+}
+
+.vhd-raw-html-help {
+    margin: 0 0 10px;
+    color: var(--vhd-muted);
+    font-size: .78rem;
+    line-height: 1.4;
+}
+
+.vhd-raw-html-preview-label {
+    margin: 8px 0 4px;
+    color: var(--vhd-muted);
+    font-size: .75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.vhd-raw-html-preview {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 220px;
+    border: 1px dashed var(--vhd-border);
+    border-radius: 6px;
+    background: #fff;
+    pointer-events: none;
 }
 
 .vhd-property-field input[type="color"] {

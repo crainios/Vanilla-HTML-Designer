@@ -1,3 +1,14 @@
+## [0.7.46] - 2026-09-27
+
+### Added
+
+- Added a native Free HTML content block with an editable source field and an isolated sandboxed preview.
+- Free HTML is sanitised again during preview, HTML export and HTML re-import.
+
+### Security
+
+- Free HTML removes scripts, embedded styles, forms, event-handler attributes, unsafe URLs, dangerous inline CSS and unapproved iframe sources.
+
 ## [0.7.45] - 2026-09-27
 
 ### Fixed

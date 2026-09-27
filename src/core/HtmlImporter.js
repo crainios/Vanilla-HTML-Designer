@@ -1,5 +1,6 @@
 import Grid from '../layout/Grid.js';
 import BlockFactory from '../blocks/BlockFactory.js';
+import { sanitizeHtml } from './HtmlSanitizer.js';
 
 const FORBIDDEN_ELEMENTS = new Set([
     'script', 'style', 'object', 'embed', 'applet', 'base', 'meta', 'link'
@@ -131,6 +132,12 @@ function parsePixels(value, fallback = 0) {
 function createTextBlock(content) {
     const block = BlockFactory.create('text');
     block.content = content;
+    return block;
+}
+
+function createRawHtmlBlock(element) {
+    const block = BlockFactory.create('raw-html');
+    block.html = sanitizeHtml(element.innerHTML);
     return block;
 }
 
@@ -595,6 +602,15 @@ function nodesToBlocks(nodes) {
         if (/^h[1-6]$/.test(tag)) {
             flushText();
             blocks.push(createHeadingBlock(element));
+            continue;
+        }
+
+        if (
+            element.classList.contains('vhd-raw-html')
+            || element.dataset.vhdBlock === 'raw-html'
+        ) {
+            flushText();
+            blocks.push(createRawHtmlBlock(element));
             continue;
         }
 

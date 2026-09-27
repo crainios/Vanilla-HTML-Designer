@@ -5,6 +5,7 @@ import createButtonBlock from './ButtonBlock.js';
 import createDividerBlock from './DividerBlock.js';
 import createSpacerBlock from './SpacerBlock.js';
 import createTableBlock from './TableBlock.js';
+import createRawHtmlBlock from './RawHtmlBlock.js';
 
 const definitions = new Map();
 
@@ -27,6 +28,7 @@ registerNative('button', createButtonBlock);
 registerNative('divider', createDividerBlock);
 registerNative('spacer', createSpacerBlock);
 registerNative('table', createTableBlock);
+registerNative('raw-html', createRawHtmlBlock);
 
 function normalizeType(value) {
     return String(value ?? '').trim().toLowerCase();

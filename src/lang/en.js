@@ -29,7 +29,8 @@ export default {
         divider: 'Divider',
         spacer: 'Spacer',
         code: 'Code',
-        table: 'Table'
+        table: 'Table',
+        'raw-html': 'Free HTML'
     },
     toolbar: {
         fontSize: 'Font size',
@@ -192,7 +193,9 @@ export default {
         linkSameWindow: 'Same window',
         linkNewWindow: 'New tab',
         removeLink: 'Remove link',
-        advanced: 'Advanced'
+        advanced: 'Advanced',
+        rawHtmlCode: 'HTML code',
+        rawHtmlHelp: 'The code is sanitised before preview and export. Scripts, forms, events and unsafe resources are removed.'
     },
     editor: {
         empty: 'Add a first row to start.',
@@ -226,6 +229,8 @@ export default {
         inlineImageSize: 'Size',
         inlineImageRemove: 'Remove image',
         inlineImageUrl: 'Image URL',
-        videoUrl: 'Video URL'
+        videoUrl: 'Video URL',
+        rawHtmlPreviewTitle: 'Secure HTML preview',
+        rawHtmlEmpty: 'Enter HTML code in the Properties panel.'
     }
 };

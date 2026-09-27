@@ -4,6 +4,7 @@ import Serializer from './Serializer.js';
 import History from './History.js';
 import TextToolbar from '../toolbar/TextToolbar.js';
 import HtmlImporter from './HtmlImporter.js';
+import { sanitizeHtml } from './HtmlSanitizer.js';
 
 function deepMerge(base, override) {
     const result = structuredClone(base);
@@ -1350,6 +1351,10 @@ export default class Editor {
                 option.textContent = optionLabel;
                 input.append(option);
             }
+        } else if (type === 'textarea') {
+            input = document.createElement('textarea');
+            input.rows = Number(options?.rows) || 14;
+            input.spellcheck = false;
         } else {
             input = document.createElement('input');
             input.type = type;
@@ -2290,6 +2295,24 @@ export default class Editor {
                         }
                     },
                     { min: 0, max: 500, step: 1 }
+                )
+            );
+        } else if (target.type === 'raw-html') {
+            const help = document.createElement('p');
+            help.className = 'vhd-raw-html-help';
+            help.textContent = this.t.properties.rawHtmlHelp;
+
+            panel.append(
+                help,
+                this.#propertyField(
+                    this.t.properties.rawHtmlCode,
+                    'textarea',
+                    target.html || '',
+                    value => {
+                        target.html = value;
+                        this.#renderRawHtmlPreview(element, target.html);
+                    },
+                    { rows: 16 }
                 )
             );
         }
@@ -7713,6 +7736,32 @@ export default class Editor {
         preview.append(frame);
     }
 
+    #renderRawHtmlPreview(container, html) {
+        const preview = container.querySelector('.vhd-raw-html-preview');
+
+        if (!(preview instanceof HTMLIFrameElement)) {
+            return;
+        }
+
+        const content = sanitizeHtml(html);
+        const empty = `<p class="vhd-raw-html-empty">${this.t.editor.rawHtmlEmpty}</p>`;
+
+        preview.srcdoc = `<!doctype html>
+            <html>
+                <head>
+                    <meta charset="utf-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <style>
+                        html { color-scheme: light; }
+                        body { margin: 12px; font-family: system-ui, sans-serif; color: #1f2937; }
+                        img, video, iframe { max-width: 100%; }
+                        .vhd-raw-html-empty { color: #6b7280; font-style: italic; }
+                    </style>
+                </head>
+                <body>${content || empty}</body>
+            </html>`;
+    }
+
     #renderBlock(block, rowIndex, columnIndex, blockIndex) {
         const wrapper = document.createElement('div');
         wrapper.className = `vhd-block vhd-block-${block.type}`;
@@ -7856,6 +7905,21 @@ export default class Editor {
             preview.style.height = `${block.height ?? 32}px`;
             preview.title = `${block.height ?? 32}px`;
             wrapper.append(preview);
+        }
+
+        if (block.type === 'raw-html') {
+            const label = document.createElement('div');
+            label.className = 'vhd-raw-html-preview-label';
+            label.textContent = this.t.editor.rawHtmlPreviewTitle;
+
+            const preview = document.createElement('iframe');
+            preview.className = 'vhd-raw-html-preview';
+            preview.title = this.t.editor.rawHtmlPreviewTitle;
+            preview.setAttribute('sandbox', '');
+            preview.setAttribute('referrerpolicy', 'no-referrer');
+
+            wrapper.append(label, preview);
+            this.#renderRawHtmlPreview(wrapper, block.html || '');
         }
 
         wrapper.addEventListener('click', event => {

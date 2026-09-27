@@ -29,7 +29,8 @@ export default {
         divider: 'Séparateur',
         spacer: 'Espacement',
         code: 'Code',
-        table: 'Tableau'
+        table: 'Tableau',
+        'raw-html': 'HTML libre'
     },
     toolbar: {
         fontSize: 'Taille des caractères',
@@ -192,7 +193,9 @@ export default {
         linkSameWindow: 'Même fenêtre',
         linkNewWindow: 'Nouvel onglet',
         removeLink: 'Supprimer le lien',
-        advanced: 'Avancé'
+        advanced: 'Avancé',
+        rawHtmlCode: 'Code HTML',
+        rawHtmlHelp: 'Le code est nettoyé avant son aperçu et son export. Les scripts, formulaires, événements et ressources dangereuses sont supprimés.'
     },
     editor: {
         empty: 'Ajoutez une première ligne pour commencer.',
@@ -226,6 +229,8 @@ export default {
         inlineImageSize: 'Taille',
         inlineImageRemove: 'Supprimer l’image',
         inlineImageUrl: 'URL de l’image',
-        videoUrl: 'URL de la vidéo'
+        videoUrl: 'URL de la vidéo',
+        rawHtmlPreviewTitle: 'Aperçu HTML sécurisé',
+        rawHtmlEmpty: 'Saisissez le code HTML dans le panneau Propriétés.'
     }
 };

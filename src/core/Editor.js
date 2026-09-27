@@ -4061,34 +4061,152 @@ export default class Editor {
             return;
         }
 
-        range.deleteContents();
+        const normalizedText = text.replace(/\r\n?/g, '\n');
+        const paragraphs = normalizedText.split(/\n[\t ]*\n+/);
+        const appendLines = (parent, value) => {
+            value.split('\n').forEach((line, index) => {
+                if (index > 0) {
+                    parent.append(document.createElement('br'));
+                }
 
-        const fragment = document.createDocumentFragment();
-        const lines = text.replace(/\r\n?/g, '\n').split('\n');
+                if (line) {
+                    parent.append(document.createTextNode(line));
+                }
+            });
+        };
+        const nodeElement = node => node.nodeType === Node.ELEMENT_NODE
+            ? node
+            : node.parentElement;
+        const startParagraph = nodeElement(range.startContainer)?.closest?.('p');
+        const endParagraph = nodeElement(range.endContainer)?.closest?.('p');
+        const canInsertParagraphs = paragraphs.length > 1
+            && element.classList.contains('vhd-editable-text')
+            && startParagraph instanceof HTMLParagraphElement
+            && startParagraph === endParagraph
+            && element.contains(startParagraph);
+        const canInsertAtRoot = paragraphs.length > 1
+            && element.classList.contains('vhd-editable-text')
+            && !startParagraph
+            && !endParagraph
+            && range.commonAncestorContainer === element;
 
-        lines.forEach((line, index) => {
-            if (index > 0) {
-                fragment.append(document.createElement('br'));
+        if (canInsertParagraphs) {
+            /*
+             * A Range may legally insert <p> inside another <p>, although the
+             * resulting editor DOM would be invalid. Split the active paragraph
+             * around the selection and insert the pasted paragraphs as siblings.
+             */
+            range.deleteContents();
+
+            const beforeRange = document.createRange();
+            beforeRange.selectNodeContents(startParagraph);
+            beforeRange.setEnd(range.startContainer, range.startOffset);
+
+            const afterRange = document.createRange();
+            afterRange.selectNodeContents(startParagraph);
+            afterRange.setStart(range.startContainer, range.startOffset);
+
+            let before = beforeRange.cloneContents();
+            let after = afterRange.cloneContents();
+            const paragraphProbe = startParagraph.cloneNode(true);
+            paragraphProbe.querySelectorAll('br').forEach(node => node.remove());
+
+            if (
+                paragraphProbe.textContent.trim() === ''
+                && paragraphProbe.children.length === 0
+            ) {
+                // Do not keep the placeholder <br> of an otherwise empty block.
+                before = document.createDocumentFragment();
+                after = document.createDocumentFragment();
             }
 
-            fragment.append(document.createTextNode(line));
-        });
+            const replacement = document.createDocumentFragment();
+            let caretMarker = null;
 
-        const lastNode = fragment.lastChild;
-        range.insertNode(fragment);
+            paragraphs.forEach((paragraphText, index) => {
+                const paragraph = document.createElement('p');
 
-        if (lastNode) {
-            const caret = document.createRange();
+                if (index === 0) {
+                    paragraph.append(before);
+                }
 
-            if (lastNode.nodeType === Node.TEXT_NODE) {
-                caret.setStart(lastNode, lastNode.textContent.length);
-            } else {
-                caret.setStartAfter(lastNode);
+                appendLines(paragraph, paragraphText);
+
+                if (index === paragraphs.length - 1) {
+                    caretMarker = document.createComment('vhd-paste-caret');
+                    paragraph.append(caretMarker, after);
+                }
+
+                if (!paragraph.childNodes.length) {
+                    paragraph.append(document.createElement('br'));
+                }
+
+                replacement.append(paragraph);
+            });
+
+            startParagraph.replaceWith(replacement);
+
+            if (caretMarker) {
+                const caret = document.createRange();
+                caret.setStartBefore(caretMarker);
+                caret.collapse(true);
+                caretMarker.remove();
+                selection.removeAllRanges();
+                selection.addRange(caret);
             }
+        } else if (canInsertAtRoot) {
+            range.deleteContents();
 
-            caret.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(caret);
+            const fragment = document.createDocumentFragment();
+            let caretMarker = null;
+
+            paragraphs.forEach((paragraphText, index) => {
+                const paragraph = document.createElement('p');
+                appendLines(paragraph, paragraphText);
+
+                if (index === paragraphs.length - 1) {
+                    caretMarker = document.createComment('vhd-paste-caret');
+                    paragraph.append(caretMarker);
+                }
+
+                if (!paragraph.childNodes.length) {
+                    paragraph.append(document.createElement('br'));
+                }
+
+                fragment.append(paragraph);
+            });
+
+            range.insertNode(fragment);
+
+            if (caretMarker) {
+                const caret = document.createRange();
+                caret.setStartBefore(caretMarker);
+                caret.collapse(true);
+                caretMarker.remove();
+                selection.removeAllRanges();
+                selection.addRange(caret);
+            }
+        } else {
+            range.deleteContents();
+
+            const fragment = document.createDocumentFragment();
+            appendLines(fragment, normalizedText);
+            const lastNode = fragment.lastChild;
+            range.insertNode(fragment);
+
+            if (lastNode) {
+                const caret = document.createRange();
+
+                if (lastNode.nodeType === Node.TEXT_NODE) {
+                    caret.setStart(lastNode, lastNode.textContent.length);
+                } else {
+                    caret.setStartAfter(lastNode);
+                }
+
+                caret.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(caret);
+            }
         }
 
         element.dispatchEvent(new InputEvent('input', {

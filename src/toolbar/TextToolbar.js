@@ -1998,6 +1998,49 @@ export default class TextToolbar {
             const template = document.createElement('template');
             template.innerHTML = String(content ?? '');
             const fragment = template.content;
+
+            /*
+             * Unknown shortcode elements such as <pdf_id> are inline from the
+             * browser's point of view. Pressing Enter immediately after one may
+             * therefore create an empty clone around the new caret position.
+             * Do not insert a second identical shortcode inside that clone.
+             */
+            const insertedElements = Array.from(fragment.children);
+            const insertedRoot = insertedElements.length === 1
+                ? insertedElements[0]
+                : null;
+            const insertedTag = insertedRoot?.tagName ?? '';
+            const isCustomTag = insertedTag.includes('-')
+                || insertedTag.includes('_');
+
+            if (isCustomTag) {
+                let ancestor = range.startContainer instanceof Element
+                    ? range.startContainer
+                    : range.startContainer.parentElement;
+
+                while (
+                    ancestor
+                    && ancestor !== this.activeEditable
+                    && ancestor.tagName !== insertedTag
+                ) {
+                    ancestor = ancestor.parentElement;
+                }
+
+                if (ancestor && ancestor !== this.activeEditable) {
+                    const clone = ancestor.cloneNode(true);
+
+                    clone.querySelectorAll('br').forEach(node => node.remove());
+
+                    if (clone.textContent.trim() === '' && clone.children.length === 0) {
+                        range.selectNode(ancestor);
+                        range.deleteContents();
+                    } else {
+                        range.setStartAfter(ancestor);
+                        range.collapse(true);
+                    }
+                }
+            }
+
             lastNode = fragment.lastChild;
             range.insertNode(fragment);
         } else {

@@ -1,3 +1,17 @@
+## [0.7.45] - 2026-09-27
+
+### Fixed
+
+- Pasting plain text into a text block now turns blank-line separators into distinct paragraphs instead of flattening the complete clipboard contents into one paragraph containing only line breaks.
+- Single line breaks inside each pasted paragraph continue to be preserved as `<br>` elements.
+
+## [0.7.44] - 2026-09-27
+
+### Fixed
+
+- HTML custom actions no longer nest a shortcode element such as `pdf_id` inside an identical empty element left around the caret after a line break.
+- When the surrounding shortcode already contains content, the newly inserted shortcode is placed immediately after it instead of producing invalid nested markup.
+
 ## [0.7.43] - 2026-09-20
 
 ### Fixed

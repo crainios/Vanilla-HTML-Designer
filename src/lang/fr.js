@@ -82,6 +82,17 @@ export default {
         color: 'Couleur du texte',
         backgroundColor: 'Couleur de fond'
     },
+    pasteSpecial: {
+        title: 'Collage spécial',
+        markdown: 'Markdown',
+        html: 'HTML nettoyé',
+        plainText: 'Texte brut',
+        adapt: 'Adapter au document',
+        success: 'Le contenu du presse-papiers a été inséré.',
+        empty: 'Le presse-papiers ne contient aucun contenu compatible.',
+        placeCursor: 'Placez d’abord le curseur dans le document.',
+        ready: 'Mode de collage sélectionné : utilisez maintenant Ctrl+V à la position du curseur.'
+    },
     search: {
         title: 'Rechercher / Remplacer',
         find: 'Rechercher',

@@ -159,7 +159,10 @@ export default class Editor {
                 this.#formatContextualSelection(command, value),
             insertInlineImage: editable => this.#insertInlineImage(editable),
             insertVideo: editable => this.#insertVideo(editable),
-            insertCode: editable => this.#insertInlineCode(editable)
+            insertCode: editable => this.#insertInlineCode(editable),
+            insertStructuredPaste: (html, editable, selection) =>
+                this.#insertStructuredPaste(html, editable, selection),
+            status: (message, type) => this.setStatus(message, type)
         });
 
         this.#buildShell();
@@ -4239,6 +4242,220 @@ export default class Editor {
         }));
     }
 
+    #fragmentHtml(fragment) {
+        const container = document.createElement('div');
+        container.append(fragment.cloneNode(true));
+        return sanitizeHtml(container.innerHTML);
+    }
+
+    #hasMeaningfulHtml(value = '') {
+        const template = document.createElement('template');
+        template.innerHTML = String(value);
+        const probe = template.content.cloneNode(true);
+        probe.querySelectorAll('br').forEach(element => element.remove());
+
+        return probe.textContent.trim() !== ''
+            || Boolean(probe.querySelector('img, video, iframe, pre, table, hr'));
+    }
+
+    #tableBlockFromElement(table) {
+        const block = BlockFactory.create('table');
+        const sourceRows = Array.from(table.rows);
+        const columnCount = Math.max(
+            1,
+            ...sourceRows.map(row => row.cells.length)
+        );
+
+        block.rows = sourceRows.map(row => {
+            const cells = Array.from(row.cells).map(cell => ({
+                content: sanitizeHtml(cell.innerHTML),
+                properties: {}
+            }));
+
+            while (cells.length < columnCount) {
+                cells.push({ content: '', properties: {} });
+            }
+
+            return cells;
+        });
+
+        if (!block.rows.length) {
+            block.rows = [[{ content: '', properties: {} }]];
+        }
+
+        block.properties.header = Boolean(
+            sourceRows[0]?.querySelector('th')
+        );
+        const baseWidth = 100 / columnCount;
+        block.properties.columnWidths = Array.from(
+            { length: columnCount },
+            (_, index) => index === columnCount - 1
+                ? 100 - (baseWidth * (columnCount - 1))
+                : baseWidth
+        );
+
+        return block;
+    }
+
+    #rangeFromOffsets(element, offsets) {
+        if (!offsets) {
+            return null;
+        }
+
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        const range = document.createRange();
+        let node;
+        let position = 0;
+        let startSet = false;
+        let endSet = false;
+
+        while ((node = walker.nextNode())) {
+            const nextPosition = position + node.textContent.length;
+
+            if (!startSet && offsets.start <= nextPosition) {
+                range.setStart(node, Math.max(0, offsets.start - position));
+                startSet = true;
+            }
+
+            if (!endSet && offsets.end <= nextPosition) {
+                range.setEnd(node, Math.max(0, offsets.end - position));
+                endSet = true;
+                break;
+            }
+
+            position = nextPosition;
+        }
+
+        if (!startSet || !endSet) {
+            range.selectNodeContents(element);
+            range.collapse(false);
+        }
+
+        return range;
+    }
+
+    #insertStructuredPaste(html, element, savedSelection = null) {
+        if (
+            !(element instanceof HTMLElement)
+            || this.disabledContentBlocks.has('table')
+        ) {
+            return false;
+        }
+
+        const wrapper = element.closest('.vhd-block');
+        const rowIndex = Number(wrapper?.dataset.rowIndex);
+        const columnIndex = Number(wrapper?.dataset.columnIndex);
+        const blockIndex = Number(wrapper?.dataset.blockIndex);
+        const column = this.project?.rows?.[rowIndex]?.columns?.[columnIndex];
+        const sourceBlock = column?.blocks?.[blockIndex];
+
+        if (
+            !wrapper
+            || !column
+            || !sourceBlock
+            || !['text', 'heading'].includes(sourceBlock.type)
+        ) {
+            return false;
+        }
+
+        const selection = window.getSelection();
+        let range = savedSelection
+            ? this.#rangeFromOffsets(element, savedSelection)
+            : selection?.rangeCount
+                ? selection.getRangeAt(0).cloneRange()
+                : null;
+
+        if (!range || !element.contains(range.commonAncestorContainer)) {
+            range = document.createRange();
+            range.selectNodeContents(element);
+            range.collapse(false);
+        }
+
+        const beforeRange = document.createRange();
+        beforeRange.selectNodeContents(element);
+        beforeRange.setEnd(range.startContainer, range.startOffset);
+
+        const afterRange = document.createRange();
+        afterRange.selectNodeContents(element);
+        afterRange.setStart(range.endContainer, range.endOffset);
+
+        const beforeHtml = this.#fragmentHtml(beforeRange.cloneContents());
+        const afterHtml = this.#fragmentHtml(afterRange.cloneContents());
+        const template = document.createElement('template');
+        template.innerHTML = sanitizeHtml(html);
+
+        if (!template.content.querySelector('table')) {
+            return false;
+        }
+
+        const replacements = [];
+        let textBuffer = document.createElement('div');
+
+        const createTextBlock = content => {
+            if (!this.#hasMeaningfulHtml(content)) {
+                return;
+            }
+
+            const previous = replacements.at(-1);
+
+            if (previous?.type === 'text') {
+                previous.content += content;
+                return;
+            }
+
+            const block = BlockFactory.create('text');
+            block.content = content;
+            block.properties = structuredClone(sourceBlock.properties ?? {});
+            replacements.push(block);
+        };
+
+        const flushText = () => {
+            createTextBlock(sanitizeHtml(textBuffer.innerHTML));
+            textBuffer = document.createElement('div');
+        };
+
+        if (this.#hasMeaningfulHtml(beforeHtml)) {
+            if (sourceBlock.type === 'heading') {
+                const heading = BlockFactory.create('heading');
+                heading.content = beforeHtml;
+                heading.level = sourceBlock.level || 2;
+                heading.properties = structuredClone(sourceBlock.properties ?? {});
+                replacements.push(heading);
+            } else {
+                createTextBlock(beforeHtml);
+            }
+        }
+
+        for (const node of Array.from(template.content.childNodes)) {
+            if (node instanceof HTMLTableElement) {
+                flushText();
+                replacements.push(this.#tableBlockFromElement(node));
+            } else {
+                textBuffer.append(node.cloneNode(true));
+            }
+        }
+
+        flushText();
+        createTextBlock(afterHtml);
+
+        if (!replacements.length) {
+            return false;
+        }
+
+        this.#remember();
+        column.blocks.splice(blockIndex, 1, ...replacements);
+        this.#emit('change', {
+            source: 'structured-paste',
+            blockId: sourceBlock.id,
+            insertedBlocks: replacements.map(block => ({
+                id: block.id,
+                type: block.type
+            }))
+        });
+        this.render();
+        return true;
+    }
+
     #hideSelectionMenu() {
         if (this.selectionMenu instanceof HTMLElement) {
             this.selectionMenu.hidden = true;
@@ -4528,6 +4745,10 @@ export default class Editor {
         }
 
         element.addEventListener('paste', event => {
+            if (this.textToolbar.handleSpecialPaste(event, element)) {
+                return;
+            }
+
             this.#pastePlainText(event, element);
         });
 

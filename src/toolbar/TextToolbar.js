@@ -1,6 +1,8 @@
 import { VERSION } from '../version.js';
 import emojiCategories from './EmojiData.js';
 import specialCharacterCategories from './SpecialCharacterData.js';
+import { sanitizeHtml } from '../core/HtmlSanitizer.js';
+import { markdownToHtml } from '../core/MarkdownConverter.js';
 
 function brandLogoIcon() {
     return `
@@ -236,6 +238,15 @@ function videoIcon() {
     `;
 }
 
+function pasteIcon() {
+    return `
+        <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <path d="M6 4.5h-2v11h10v-11h-2M6.5 3h5v3h-5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path>
+            <path d="M6.5 9h5M6.5 12h4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
+        </svg>
+    `;
+}
+
 export default class TextToolbar {
     constructor(translations, actions = {}) {
         this.t = translations;
@@ -253,6 +264,8 @@ export default class TextToolbar {
         this.listTrigger = null;
         this.quoteButton = null;
         this.linkButton = null;
+        this.pasteSpecialTrigger = null;
+        this.pendingPasteMode = null;
         this.formatSelect = null;
         this.fontSizeSelect = null;
         this.fontFamilySelect = null;
@@ -939,6 +952,138 @@ export default class TextToolbar {
                 action: () => this.#applyLineHeight(value)
             }))
         );
+    }
+
+    #plainTextToHtml(value = '') {
+        const escape = text => String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        return String(value)
+            .replace(/\r\n?/g, '\n')
+            .split(/\n[\t ]*\n+/)
+            .map(paragraph => `<p>${paragraph.split('\n').map(escape).join('<br>') || '<br>'}</p>`)
+            .join('');
+    }
+
+    #adaptHtmlToDocument(value = '') {
+        const template = document.createElement('template');
+        template.innerHTML = sanitizeHtml(value);
+
+        template.content.querySelectorAll('*').forEach(element => {
+            for (const attribute of Array.from(element.attributes)) {
+                if (!['href', 'src', 'alt', 'title', 'colspan', 'rowspan'].includes(attribute.name.toLowerCase())) {
+                    element.removeAttribute(attribute.name);
+                }
+            }
+        });
+
+        return template.innerHTML;
+    }
+
+    #armPasteSpecial(mode) {
+        if (!(this.activeEditable instanceof HTMLElement)) {
+            this.actions.status?.(this.t.pasteSpecial.placeCursor, 'info');
+            return;
+        }
+
+        this.pendingPasteMode = mode;
+        this.pasteSpecialTrigger?.classList.add('is-active');
+        this.activeEditable.focus({ preventScroll: true });
+        this.#restoreSelection();
+        this.actions.status?.(this.t.pasteSpecial.ready, 'info');
+    }
+
+    #savedSelectionOffsets() {
+        if (
+            !(this.activeEditable instanceof HTMLElement)
+            || !this.savedRange
+        ) {
+            return null;
+        }
+
+        const range = this.savedRange;
+        const start = range.cloneRange();
+        const end = range.cloneRange();
+
+        try {
+            start.selectNodeContents(this.activeEditable);
+            start.setEnd(range.startContainer, range.startOffset);
+            end.selectNodeContents(this.activeEditable);
+            end.setEnd(range.endContainer, range.endOffset);
+        } catch {
+            return null;
+        }
+
+        return {
+            start: start.toString().length,
+            end: end.toString().length
+        };
+    }
+
+    #pasteSpecialDropdown() {
+        const dropdown = this.#dropdown(
+            this.t.pasteSpecial.title,
+            pasteIcon(),
+            [
+                { label: this.t.pasteSpecial.markdown, icon: '<strong>MD</strong>', action: () => this.#armPasteSpecial('markdown') },
+                { label: this.t.pasteSpecial.html, icon: '<span class="vhd-paste-html-icon">&lt;/&gt;</span>', action: () => this.#armPasteSpecial('html') },
+                { label: this.t.pasteSpecial.plainText, icon: '<strong>T</strong>', action: () => this.#armPasteSpecial('text') },
+                { label: this.t.pasteSpecial.adapt, icon: '<strong>Aa</strong>', action: () => this.#armPasteSpecial('adapt') }
+            ]
+        );
+
+        this.pasteSpecialTrigger = dropdown.querySelector('.vhd-toolbar-dropdown-trigger');
+        return dropdown;
+    }
+
+    handleSpecialPaste(event, element) {
+        if (!this.pendingPasteMode || element !== this.activeEditable) {
+            return false;
+        }
+
+        event.preventDefault();
+        const mode = this.pendingPasteMode;
+        this.pendingPasteMode = null;
+        this.pasteSpecialTrigger?.classList.remove('is-active');
+
+        const text = event.clipboardData?.getData('text/plain') ?? '';
+        const clipboardHtml = event.clipboardData?.getData('text/html') ?? '';
+        let html = '';
+
+        if (mode === 'markdown') {
+            html = markdownToHtml(text);
+        } else if (mode === 'html') {
+            html = clipboardHtml || text;
+        } else if (mode === 'adapt') {
+            html = this.#adaptHtmlToDocument(clipboardHtml || this.#plainTextToHtml(text));
+        } else {
+            html = this.#plainTextToHtml(text);
+        }
+
+        html = sanitizeHtml(html);
+
+        if (!html.trim()) {
+            this.actions.status?.(this.t.pasteSpecial.empty, 'info');
+            return true;
+        }
+
+        if (
+            html.includes('<table')
+            && this.actions.insertStructuredPaste?.(
+                html,
+                element,
+                this.#savedSelectionOffsets()
+            ) === true
+        ) {
+            this.actions.status?.(this.t.pasteSpecial.success, 'success');
+            return true;
+        }
+
+        this.insertAtCursor(html, { html: true });
+        this.actions.status?.(this.t.pasteSpecial.success, 'success');
+        return true;
     }
 
 
@@ -2775,6 +2920,10 @@ export default class TextToolbar {
         versionBadge.addEventListener('click', () => this.#showAboutDialog());
 
         this.element.append(
+            // Paste at the current caret position
+            this.#toolbarItem('pasteSpecial', this.#pasteSpecialDropdown()),
+            this.#separator(),
+
             // History / reset
             this.#toolbarItem('undo', undoButton),
             this.#toolbarItem('redo', redoButton),

@@ -54,6 +54,8 @@ Each row can use a different layout without affecting the others.
 - Spacer block
 - Secure Free HTML block
 - Plain-text paste sanitization (external HTML/styles are discarded)
+- Explicit Paste special menu for Markdown, sanitized HTML, plain text and content adapted to the document style; choose a mode, then use the native paste command at the caret position
+- Markdown tables pasted through Paste special become independent, fully editable Table content blocks; surrounding text is split automatically
 - Rich-text formatting:
   - paragraphs
   - H1 to H6

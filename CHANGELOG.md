@@ -1,3 +1,26 @@
+## [0.7.49] - 2026-09-28
+
+### Added
+
+- Markdown and formatted special paste now convert top-level tables into native editable Table content blocks.
+- Text surrounding a pasted table is split into independent Text blocks at the caret position, with one native Table block per pasted table.
+
+## [0.7.48] - 2026-09-28
+
+### Changed
+
+- Paste special is now the first toolbar command.
+- Choosing a special-paste mode arms the next native paste at the saved caret position, avoiding the browser's small clipboard-permission button.
+- Shortened the document-style option label and kept the sanitized-HTML icon on one line.
+
+## [0.7.47] - 2026-09-28
+
+### Added
+
+- Added a Paste special toolbar menu with Markdown, sanitized HTML, plain-text and document-style modes.
+- Markdown paste supports headings, paragraphs, line breaks, emphasis, links, images, lists, quotes, tables, horizontal rules and fenced code blocks.
+- All formatted clipboard content is sanitized before it is inserted into the editor.
+
 ## [0.7.46] - 2026-09-27
 
 ### Added

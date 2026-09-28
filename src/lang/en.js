@@ -82,6 +82,17 @@ export default {
         color: 'Text color',
         backgroundColor: 'Text background color'
     },
+    pasteSpecial: {
+        title: 'Paste special',
+        markdown: 'Markdown',
+        html: 'Sanitized HTML',
+        plainText: 'Plain text',
+        adapt: 'Match document',
+        success: 'Clipboard content was inserted.',
+        empty: 'The clipboard contains no compatible content.',
+        placeCursor: 'Place the caret in the document first.',
+        ready: 'Paste mode selected: now press Ctrl+V at the caret position.'
+    },
     search: {
         title: 'Find / Replace',
         find: 'Find',

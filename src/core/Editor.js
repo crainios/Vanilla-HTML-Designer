@@ -1,8 +1,9 @@
+import Shortcodes, { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from './Shortcodes.js?v=0.7.72';
 import Grid from '../layout/Grid.js';
 import BlockFactory from '../blocks/BlockFactory.js';
 import Serializer from './Serializer.js';
 import History from './History.js';
-import TextToolbar from '../toolbar/TextToolbar.js';
+import TextToolbar from '../toolbar/TextToolbar.js?v=0.7.72';
 import HtmlImporter from './HtmlImporter.js';
 import { sanitizeHtml } from './HtmlSanitizer.js';
 
@@ -68,6 +69,8 @@ export default class Editor {
         );
         this.root.style.setProperty('--vhd-default-font-family', this.options.defaultFontFamily);
         this.t = deepMerge(fallbackTranslations, this.options.translations ?? {});
+        this.shortcodes = new Shortcodes(this.options);
+        this.shortcodes.labels = this.t.shortcodes;
         this.project = this.#normalizeLegacyColumnBackgrounds(
             HtmlImporter.fromHtml(this.options.html)
                 || this.#createDefaultProject()
@@ -148,6 +151,9 @@ export default class Editor {
             customButtons: this.options.customButtons ?? [],
             disabledToolbarButtons: this.options.disabledToolbarButtons ?? [],
             publicApi: () => this.options.publicApi ?? null,
+            shortcodeMode: this.shortcodes.mode,
+            canRenderShortcodes: typeof this.options.renderShortcode === 'function',
+            setShortcodeMode: mode => this.setShortcodeMode(mode),
             undo: () => this.undo(),
             redo: () => this.redo(),
             exportJson: () => this.#showOutput(JSON.stringify(this.getData(), null, 2)),
@@ -229,6 +235,14 @@ export default class Editor {
         }
 
         return this.isFullscreen;
+    }
+
+    setShortcodeMode(mode) {
+        if (!['shortcode', 'rendered'].includes(mode)) throw new Error('Invalid shortcode mode');
+        this.shortcodes.mode = mode;
+        this.shortcodes.protect(this.canvas, true);
+        if (this.previewContent) this.shortcodes.protect(this.previewContent, true, 'rendered');
+        this.textToolbar.setShortcodeMode(mode);
     }
 
     insertAtCursor(content, options = {}) {
@@ -1159,6 +1173,7 @@ export default class Editor {
         }
 
         this.previewContent.innerHTML = this.getHtml();
+        this.shortcodes.protect(this.previewContent, false, 'rendered');
 
         if (window.VanillaHtmlCode?.enhance) {
             window.VanillaHtmlCode.enhance(this.previewContent);
@@ -2336,7 +2351,7 @@ export default class Editor {
 
         const update = callback => value => {
             callback(value);
-            block.content = editable.innerHTML;
+            block.content = serializeShortcodes(editable);
             this.#emit('change', {
                 source: 'quote:property',
                 blockId: block.id
@@ -3663,7 +3678,7 @@ export default class Editor {
             const cell = block?.rows?.[rowIndex]?.[columnIndex];
 
             if (cell) {
-                cell.content = editable.innerHTML;
+                cell.content = serializeShortcodes(editable);
             }
         }
 
@@ -4096,7 +4111,7 @@ export default class Editor {
                 }
 
                 if (line) {
-                    parent.append(document.createTextNode(line));
+                    parent.append(shortcodeTextFragment(line));
                 }
             });
         };
@@ -4245,7 +4260,7 @@ export default class Editor {
     #fragmentHtml(fragment) {
         const container = document.createElement('div');
         container.append(fragment.cloneNode(true));
-        return sanitizeHtml(container.innerHTML);
+        return sanitizeHtml(serializeShortcodes(container));
     }
 
     #hasMeaningfulHtml(value = '') {
@@ -4268,7 +4283,7 @@ export default class Editor {
 
         block.rows = sourceRows.map(row => {
             const cells = Array.from(row.cells).map(cell => ({
-                content: sanitizeHtml(cell.innerHTML),
+                content: sanitizeHtml(serializeShortcodes(cell)),
                 properties: {}
             }));
 
@@ -4410,7 +4425,7 @@ export default class Editor {
         };
 
         const flushText = () => {
-            createTextBlock(sanitizeHtml(textBuffer.innerHTML));
+            createTextBlock(sanitizeHtml(serializeShortcodes(textBuffer)));
             textBuffer = document.createElement('div');
         };
 
@@ -4680,6 +4695,7 @@ export default class Editor {
     }
 
     #editable(element, block, property) {
+        this.shortcodes.protect(element);
         element.contentEditable = 'true';
         element.spellcheck = true;
         element.style.fontFamily = this.options.defaultFontFamily;
@@ -4744,6 +4760,25 @@ export default class Editor {
             });
         }
 
+        const copyShortcodes = event => {
+            const selection = window.getSelection();
+            if (!selection?.rangeCount || !event.clipboardData) return;
+            const range = selection.getRangeAt(0);
+            if (!element.contains(range.commonAncestorContainer)) return;
+            const container = document.createElement('div');
+            container.append(range.cloneContents());
+            if (!container.querySelector('shortcode')) return;
+            event.preventDefault();
+            event.clipboardData.setData('text/html', serializeShortcodes(container));
+            event.clipboardData.setData('text/plain', shortcodePlainText(container));
+            if (event.type === 'cut') {
+                range.deleteContents();
+                element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteByCut' }));
+            }
+        };
+        element.addEventListener('copy', copyShortcodes);
+        element.addEventListener('cut', copyShortcodes);
+
         element.addEventListener('paste', event => {
             if (this.textToolbar.handleSpecialPaste(event, element)) {
                 return;
@@ -4752,7 +4787,43 @@ export default class Editor {
             this.#pastePlainText(event, element);
         });
 
+        element.addEventListener('vhd:shortcode-caret', event => {
+            if (!(event.detail?.range instanceof Range)) return;
+            this.textToolbar.setActiveEditable(element);
+            this.textToolbar.savedRange = event.detail.range.cloneRange();
+        });
+
+        element.addEventListener('beforeinput', event => {
+            if (!String(event.inputType || '').startsWith('insert')) return;
+            const selection = window.getSelection();
+            if (!selection?.rangeCount) return;
+            const range = selection.getRangeAt(0);
+            if (!range.collapsed || !element.contains(range.commonAncestorContainer)) return;
+            const startElement = range.startContainer.nodeType === Node.ELEMENT_NODE
+                ? range.startContainer
+                : range.startContainer.parentElement;
+            const caret = startElement?.closest?.('[data-vhd-shortcode-caret]');
+            if (!caret || !element.contains(caret)) return;
+
+            // Normal typing, spaces and Enter must never be inserted inside
+            // the technical marker that follows a protected shortcode.
+            range.setStartAfter(caret);
+            range.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            this.textToolbar.savedRange = range.cloneRange();
+        });
+
         element.addEventListener('keydown', event => {
+            if ((event.ctrlKey || event.metaKey) && !event.altKey && ['z', 'y'].includes(event.key.toLowerCase())) {
+                event.preventDefault();
+                const editables = [...this.canvas.querySelectorAll('[contenteditable="true"]')];
+                const index = editables.indexOf(element);
+                if (event.shiftKey || event.key.toLowerCase() === 'y') this.redo();
+                else this.undo();
+                this.canvas.querySelectorAll('[contenteditable="true"]')[index]?.focus();
+                return;
+            }
             const selection = window.getSelection();
 
             if (!selection || selection.rangeCount === 0) {
@@ -4763,6 +4834,254 @@ export default class Editor {
             const startElement = range.startContainer.nodeType === Node.ELEMENT_NODE
                 ? range.startContainer
                 : range.startContainer.parentElement;
+
+            if (
+                range.collapsed
+                && ['ArrowLeft', 'ArrowRight'].includes(event.key)
+            ) {
+                const backwards = event.key === 'ArrowLeft';
+                const containingShortcode = startElement?.closest?.('[data-vhd-shortcode]');
+                let adjacentShortcode = containingShortcode && element.contains(containingShortcode)
+                    ? containingShortcode
+                    : null;
+
+                if (!adjacentShortcode) {
+                    const shortcodes = [...element.querySelectorAll('[data-vhd-shortcode]')];
+                    if (backwards) shortcodes.reverse();
+                    adjacentShortcode = shortcodes.find(shortcode => {
+                        const boundary = document.createRange();
+                        if (backwards) boundary.setStartAfter(shortcode);
+                        else boundary.setStartBefore(shortcode);
+                        boundary.collapse(true);
+                        const relation = boundary.comparePoint(range.startContainer, range.startOffset);
+                        if (backwards ? relation < 0 : relation > 0) return false;
+                        const gap = document.createRange();
+                        try {
+                            if (backwards) {
+                                gap.setStartAfter(shortcode);
+                                gap.setEnd(range.startContainer, range.startOffset);
+                            } else {
+                                gap.setStart(range.startContainer, range.startOffset);
+                                gap.setEndBefore(shortcode);
+                            }
+                        } catch (_) {
+                            return false;
+                        }
+                        const contents = gap.cloneContents();
+                        const wrapper = document.createElement('div');
+                        wrapper.append(contents);
+                        return wrapper.textContent.replace(/\u200b/g, '') === ''
+                            && !wrapper.querySelector('br, [data-vhd-shortcode]');
+                    }) || null;
+                }
+
+                if (adjacentShortcode) {
+                    event.preventDefault();
+                    const nextRange = document.createRange();
+                    const caretParagraph = startElement?.closest?.('p, div');
+                    const shortcodeParagraph = adjacentShortcode.parentElement?.closest?.('p, div');
+                    const crossesParagraph = caretParagraph
+                        && shortcodeParagraph
+                        && caretParagraph !== shortcodeParagraph;
+                    if (backwards === crossesParagraph) nextRange.setStartAfter(adjacentShortcode);
+                    else nextRange.setStartBefore(adjacentShortcode);
+                    nextRange.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(nextRange);
+                    this.textToolbar.savedRange = nextRange.cloneRange();
+                    return;
+                }
+            }
+
+            if (
+                range.collapsed
+                && ['Backspace', 'Delete'].includes(event.key)
+            ) {
+                const backwards = event.key === 'Backspace';
+                const emptyLine = startElement?.closest?.('p, div');
+                const removableEmptyLine = emptyLine
+                    && emptyLine !== element
+                    && element.contains(emptyLine)
+                    && !emptyLine.querySelector('[data-vhd-shortcode]')
+                    && emptyLine.textContent.replace(/\u200b/g, '').trim() === ''
+                    && [...emptyLine.children].every(child => child.tagName === 'BR');
+
+                if (removableEmptyLine) {
+                    event.preventDefault();
+                    this.#remember();
+                    const parent = emptyLine.parentNode;
+                    const offset = Array.from(parent.childNodes).indexOf(emptyLine);
+                    emptyLine.remove();
+                    const nextRange = document.createRange();
+                    nextRange.setStart(parent, Math.min(offset, parent.childNodes.length));
+                    nextRange.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(nextRange);
+                    element.dispatchEvent(new InputEvent('input', {
+                        bubbles: true,
+                        inputType: backwards
+                            ? 'deleteContentBackward'
+                            : 'deleteContentForward'
+                    }));
+                    return;
+                }
+
+                if (range.startContainer.nodeType === Node.ELEMENT_NODE) {
+                    const children = range.startContainer.childNodes;
+                    const directBreak = children[
+                        backwards ? range.startOffset - 1 : range.startOffset
+                    ];
+                    const breakBeforeForwardTarget = !backwards
+                        ? children[range.startOffset - 1]
+                        : null;
+                    const removableBreak = directBreak?.nodeName === 'BR'
+                        ? directBreak
+                        : (breakBeforeForwardTarget?.nodeName === 'BR'
+                            ? breakBeforeForwardTarget
+                            : null);
+
+                    if (removableBreak) {
+                        event.preventDefault();
+                        this.#remember();
+                        const parent = removableBreak.parentNode;
+                        const offset = Array.from(parent.childNodes).indexOf(removableBreak);
+                        removableBreak.remove();
+                        const nextRange = document.createRange();
+                        nextRange.setStart(parent, Math.min(offset, parent.childNodes.length));
+                        nextRange.collapse(true);
+                        selection.removeAllRanges();
+                        selection.addRange(nextRange);
+                        element.dispatchEvent(new InputEvent('input', {
+                            bubbles: true,
+                            inputType: backwards
+                                ? 'deleteContentBackward'
+                                : 'deleteContentForward'
+                        }));
+                        return;
+                    }
+                }
+
+                const focusedToken = event.target.closest?.(
+                    '[data-vhd-shortcode]'
+                );
+                let adjacentNode = null;
+
+                if (range.startContainer.nodeType === Node.TEXT_NODE) {
+                    const text = range.startContainer;
+                    const atBoundary = backwards
+                        ? range.startOffset === 0
+                        : range.startOffset === text.textContent.length;
+                    if (atBoundary) adjacentNode = backwards
+                        ? text.previousSibling
+                        : text.nextSibling;
+                } else {
+                    adjacentNode = range.startContainer.childNodes[
+                        backwards ? range.startOffset - 1 : range.startOffset
+                    ] || null;
+                }
+
+                while (
+                    adjacentNode?.nodeType === Node.TEXT_NODE
+                    && adjacentNode.textContent.replace(/\u200b/g, '') === ''
+                ) {
+                    adjacentNode = backwards
+                        ? adjacentNode.previousSibling
+                        : adjacentNode.nextSibling;
+                }
+
+                const adjacentToken = adjacentNode?.nodeType === Node.ELEMENT_NODE
+                    && adjacentNode.matches('[data-vhd-shortcode]')
+                    ? adjacentNode
+                    : null;
+                const token = focusedToken
+                    || adjacentToken;
+
+                if (token && element.contains(token)) {
+                    event.preventDefault();
+                    this.#remember();
+                    const parent = token.parentNode;
+                    const offset = Array.from(parent.childNodes).indexOf(token);
+                    token.remove();
+
+                    const nextRange = document.createRange();
+                    nextRange.setStart(parent, Math.min(offset, parent.childNodes.length));
+                    nextRange.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(nextRange);
+                    element.dispatchEvent(new InputEvent('input', {
+                        bubbles: true,
+                        inputType: event.key === 'Backspace'
+                            ? 'deleteContentBackward'
+                            : 'deleteContentForward'
+                    }));
+                    return;
+                }
+            }
+
+            if (
+                range.collapsed
+                && event.key === 'Enter'
+                && !event.shiftKey
+                && !event.ctrlKey
+                && !event.metaKey
+                && !event.altKey
+            ) {
+                let previousNode = null;
+                if (range.startContainer.nodeType === Node.TEXT_NODE) {
+                    const text = range.startContainer;
+                    if (range.startOffset === 0 || text.textContent.replace(/\u200b/g, '') === '') {
+                        previousNode = text.previousSibling;
+                    }
+                } else {
+                    previousNode = range.startContainer.childNodes[range.startOffset - 1] || null;
+                }
+                while (
+                    previousNode?.nodeType === Node.TEXT_NODE
+                    && previousNode.textContent.replace(/\u200b/g, '') === ''
+                ) previousNode = previousNode.previousSibling;
+                const blockShortcode = previousNode?.nodeType === Node.ELEMENT_NODE
+                    && previousNode.matches('[data-vhd-shortcode]')
+                    && previousNode.style.display === 'block'
+                    ? previousNode
+                    : null;
+
+                if (blockShortcode) {
+                    const line = blockShortcode.parentElement;
+                    const trailing = [];
+                    let sibling = blockShortcode.nextSibling;
+                    let onlyPlaceholders = true;
+                    while (sibling) {
+                        trailing.push(sibling);
+                        if (
+                            !(sibling.nodeType === Node.TEXT_NODE && sibling.textContent.replace(/\u200b/g, '') === '')
+                            && !(sibling.nodeType === Node.ELEMENT_NODE && sibling.tagName === 'BR')
+                        ) onlyPlaceholders = false;
+                        sibling = sibling.nextSibling;
+                    }
+
+                    if (line && onlyPlaceholders) {
+                        event.preventDefault();
+                        this.#remember();
+                        trailing.forEach(node => node.remove());
+                        const paragraph = document.createElement('p');
+                        paragraph.append(document.createElement('br'));
+                        if (line === element) blockShortcode.after(paragraph);
+                        else line.after(paragraph);
+                        const nextRange = document.createRange();
+                        nextRange.setStart(paragraph, 0);
+                        nextRange.collapse(true);
+                        selection.removeAllRanges();
+                        selection.addRange(nextRange);
+                        this.textToolbar.savedRange = nextRange.cloneRange();
+                        element.dispatchEvent(new InputEvent('input', {
+                            bubbles: true,
+                            inputType: 'insertParagraph'
+                        }));
+                        return;
+                    }
+                }
+            }
+
             const pre = startElement?.closest?.('pre.vhd-code');
 
             if (!pre || !element.contains(pre)) {
@@ -4863,7 +5182,7 @@ export default class Editor {
             }
 
             this.#remember();
-            block[property] = element.innerHTML;
+            block[property] = serializeShortcodes(element);
             block.level = level;
 
             const replacement = document.createElement(`h${level}`);
@@ -4890,6 +5209,7 @@ export default class Editor {
         });
 
         element.addEventListener('input', () => {
+            this.shortcodes.protect(element);
             this.#hideSelectionMenu();
             syncTextPlaceholder();
             this.#remember();
@@ -4903,7 +5223,7 @@ export default class Editor {
                 }
             }
 
-            block[property] = element.innerHTML;
+            block[property] = serializeShortcodes(element);
             this.#emit('change', {
                 source: 'content',
                 blockId: block.id
@@ -4940,7 +5260,7 @@ export default class Editor {
                 }
             }
 
-            block[property] = element.innerHTML;
+            block[property] = serializeShortcodes(element);
             this.#updateDocumentStatistics();
         });
     }
@@ -5735,7 +6055,7 @@ export default class Editor {
                 }
 
                 if (line) {
-                    paragraph.append(document.createTextNode(line));
+                    paragraph.append(shortcodeTextFragment(line));
                 }
             });
 
@@ -5979,7 +6299,7 @@ export default class Editor {
                     document.execCommand(command, false, value);
                 }
 
-                cell.content = cellElement.innerHTML;
+                cell.content = serializeShortcodes(cellElement);
             }
         } finally {
             this.isFormattingTableSelection = false;
@@ -8386,6 +8706,7 @@ export default class Editor {
         if (!this.project.rows.length) {
             content.append(this.#createRowChooser(0));
             this.canvas.append(content);
+            this.shortcodes.protect(this.canvas);
             this.#syncHistoryButtons();
             this.#updateDocumentStatistics();
             return;
@@ -8492,6 +8813,7 @@ export default class Editor {
         });
 
         this.canvas.append(content);
+        this.shortcodes.protect(this.canvas);
         this.#syncHistoryButtons();
         this.#updateDocumentStatistics();
     }

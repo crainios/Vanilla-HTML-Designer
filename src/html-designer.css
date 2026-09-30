@@ -2054,6 +2054,18 @@
     height: 17px;
 }
 
+.vhd-shortcode-mode-button.is-active {
+    color: #1d4ed8;
+    background: #dbeafe;
+}
+
+.vhd-shortcode-caret {
+    display: inline-block;
+    width: 3px;
+    min-height: 1em;
+    vertical-align: text-bottom;
+}
+
 
 /* 0.6.50 — Find / Replace */
 .vhd-search-dialog {

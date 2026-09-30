@@ -1,4 +1,12 @@
 export default {
+    shortcodes: {
+        "display": "Shortcode display",
+        "source": "Shortcodes",
+        "rendered": "Rendered shortcodes",
+        "unavailable": "No renderer configured",
+        "loading": "Loading…",
+        "error": "Preview unavailable"
+},
     actions: {
         undo: 'Undo',
         redo: 'Redo',

@@ -1,4 +1,4 @@
-import Editor from './core/Editor.js';
+import Editor from './core/Editor.js?v=0.7.72';
 import Serializer from './core/Serializer.js';
 import BlockFactory from './blocks/BlockFactory.js';
 import EventBus from './core/EventBus.js';
@@ -131,6 +131,10 @@ export default class HtmlDesigner {
 
     loadHtml(html) {
         this.editor.loadHtml(html);
+    }
+
+    setShortcodeMode(mode) {
+        this.editor.setShortcodeMode(mode);
     }
 
     insertAtCursor(content, options = {}) {

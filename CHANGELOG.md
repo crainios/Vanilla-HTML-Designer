@@ -1,3 +1,53 @@
+## [0.7.55] - 2026-09-29
+
+### Changed
+
+- Trusted shortcode previews are now rendered directly in a protected, non-interactive editor container so they inherit application styles and size naturally without an iframe.
+
+### Fixed
+
+- Full-width shortcode source labels no longer wrap their tokens onto several lines.
+
+## [0.7.54] - 2026-09-29
+
+### Fixed
+
+- Legacy shortcode elements are rendered as full-width blocks by default, regardless of surrounding line breaks or paragraph markup.
+
+## [0.7.53] - 2026-09-29
+
+### Fixed
+
+- Block shortcode previews now occupy the full available editor width without overflowing their content area.
+
+## [0.7.52] - 2026-09-29
+
+### Added
+
+- Protected shortcode support for BlogTheque's legacy `pdf_id`, `mp3_id`, `gal_id`, `url_id` and `form_id` elements.
+- The `shortcodeTags` option can register additional legacy shortcode element names.
+- Shortcode renderers now receive the original tag name and complete preserved HTML in their context argument.
+
+## [0.7.51] - 2026-09-29
+
+### Changed
+
+- The document preview now uses an eyeglasses icon.
+- The shortcode mode button now uses eye and eye-slash icons to distinguish rendered and source modes.
+
+## [0.7.50] - 2026-09-29
+
+### Changed
+
+- Replaced the Shortcodes / Rendered shortcodes selector with a compact two-state toolbar icon.
+- Rendered shortcode previews now adapt their iframe height to their actual contents instead of reserving 150 pixels unconditionally.
+
+### Fixed
+
+- A shortcode placed at the end of an editable area now keeps a caret position after it, allowing writing to continue.
+- Focused shortcodes and shortcodes immediately before their caret marker can be removed with Backspace or Delete.
+- Editor-only shortcode caret markers are excluded from JSON, HTML export and clipboard text.
+
 ## [0.7.49] - 2026-09-28
 
 ### Added
@@ -2134,3 +2184,113 @@ All notable changes to Vanilla HTML Designer will be documented in this file.
 - External image picker hook.
 - English fallback and French translation.
 - Standalone demo.
+## [0.7.72] - 2026-09-30
+
+### Changed
+
+- The distributed editor now recognizes only the universal `<shortcode>` element by default.
+- Application-specific elements, including BlogTheque legacy shortcodes, must be registered explicitly with `shortcodeTags`.
+
+## [0.7.71] - 2026-09-30
+
+### Fixed
+
+- L’aperçu général affiche désormais toujours le rendu final des shortcodes, indépendamment du mode source/rendu choisi dans l’éditeur.
+
+## [0.7.70] - 2026-09-29
+
+### Fixed
+
+- En passant d’un paragraphe à un autre avec les flèches, le curseur se place désormais avant le premier shortcode du paragraphe suivant ou après le dernier shortcode du paragraphe précédent, sans le franchir prématurément.
+
+## [0.7.69] - 2026-09-29
+
+### Fixed
+
+- Entrée après un shortcode pleine largeur supprime le `<br>` de remplissage résiduel et crée un seul nouveau paragraphe éditable `<p><br></p>`.
+
+## [0.7.68] - 2026-09-29
+
+### Fixed
+
+- Un shortcode générique `<shortcode>` reste désormais `inline`, même lorsqu’il est seul dans son paragraphe. Seules les balises spécialisées ou explicitement déclarées `block` occupent toute la largeur.
+
+## [0.7.67] - 2026-09-29
+
+### Fixed
+
+- L’insertion d’un shortcode pleine largeur dans une ligne vide remplace désormais le `<br>` de remplissage de cette ligne au lieu de le conserver après le shortcode.
+
+## [0.7.66] - 2026-09-29
+
+### Fixed
+
+- Les espaces ordinaires et insécables entre deux shortcodes `inline` conservent chacun leur position de navigation au clavier ; seuls les points d’ancrage techniques invisibles sont traversés automatiquement.
+
+## [0.7.65] - 2026-09-29
+
+### Fixed
+
+- Les shortcodes `inline` disposent désormais d’un point d’ancrage textuel invisible permettant au navigateur d’afficher et de conserver réellement le curseur après un shortcode terminal. Ces ancres sont exclues du HTML enregistré et du texte copié.
+
+## [0.7.64] - 2026-09-29
+
+### Fixed
+
+- La navigation atomique des shortcodes ne dépend plus de nœuds HTML directement voisins et fonctionne aussi lorsque l’espacement est enveloppé par une mise en forme.
+
+## [0.7.63] - 2026-09-29
+
+### Fixed
+
+- La navigation au clavier franchit correctement deux shortcodes `inline` voisins, y compris lorsqu’un espace textuel les sépare ou que le navigateur place momentanément la sélection dans un élément protégé.
+
+## [0.7.62] - 2026-09-29
+
+### Fixed
+
+- Les flèches gauche et droite franchissent désormais les shortcodes protégés comme des caractères atomiques et placent le curseur immédiatement avant ou après.
+
+## [0.7.61] - 2026-09-29
+
+### Fixed
+
+- Delete on an empty paragraph or direct line break before a shortcode removes the empty line first and preserves the shortcode.
+
+## [0.7.60] - 2026-09-29
+
+### Changed
+
+- Protected shortcodes now behave as atomic editor characters without auxiliary caret elements.
+- Clicking the left or right half of a shortcode places the native caret before or after it.
+
+### Fixed
+
+- Backspace and Delete remove only the shortcode immediately adjacent to the native caret.
+- Spaces, paragraphs and neighboring shortcodes can be inserted normally without technical blank lines.
+
+## [0.7.59] - 2026-09-29
+
+### Fixed
+
+- Typing text, spaces or a new paragraph after a shortcode now escapes its technical caret marker before insertion.
+- Full-width shortcode caret markers remain visible to the user without reserving an additional document line.
+
+## [0.7.58] - 2026-09-29
+
+### Fixed
+
+- Caret markers following full-width shortcodes no longer reserve a visible blank line.
+- Pressing Delete from a shortcode caret no longer targets an unrelated shortcode that follows it.
+
+## [0.7.57] - 2026-09-29
+
+### Fixed
+
+- Inserting a shortcode after pressing Enter behind another shortcode now escapes the cloned caret marker instead of nesting the new shortcode inside its three-pixel editing box.
+
+## [0.7.56] - 2026-09-29
+
+### Fixed
+
+- Legacy block shortcodes keep a full-width flex basis and clear preceding inline content, preventing audio and other media previews from collapsing after a line break.

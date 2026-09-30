@@ -1,3 +1,4 @@
+import { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from '../core/Shortcodes.js?v=0.7.72';
 import { VERSION } from '../version.js';
 import emojiCategories from './EmojiData.js';
 import specialCharacterCategories from './SpecialCharacterData.js';
@@ -197,8 +198,35 @@ function searchReplaceIcon() {
 function previewIcon() {
     return `
         <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
-            <path d="M9 3C4.8 3 2 6.2.8 9c1.2 2.8 4 6 8.2 6s7-3.2 8.2-6C16 6.2 13.2 3 9 3zm0 10.2C6 13.2 3.8 11 2.7 9 3.8 7 6 4.8 9 4.8S14.2 7 15.3 9C14.2 11 12 13.2 9 13.2z"></path>
-            <circle cx="9" cy="9" r="2.4"></circle>
+            <path d="M1.5 8.2 3 4.8M16.5 8.2 15 4.8M7.4 8.8c.9-.6 2.3-.6 3.2 0"
+                fill="none" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round"/>
+            <circle cx="4.8" cy="10.4" r="3.1" fill="none"
+                stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="13.2" cy="10.4" r="3.1" fill="none"
+                stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+    `;
+}
+
+function shortcodeModeIcon(mode) {
+    if (mode === 'rendered') {
+        return `
+            <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+                <path d="M1.2 9s2.8-5 7.8-5 7.8 5 7.8 5-2.8 5-7.8 5-7.8-5-7.8-5z"
+                    fill="none" stroke="currentColor" stroke-width="1.5"
+                    stroke-linejoin="round"/>
+                <circle cx="9" cy="9" r="2.4" fill="none"
+                    stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+        `;
+    }
+
+    return `
+        <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <path d="M2.2 6.1C1.5 7 1.2 7.8 1.2 7.8s2.8 5 7.8 5c1.2 0 2.2-.3 3.1-.7M5.1 4.2C6.2 3.4 7.5 3 9 3c5 0 7.8 5 7.8 5s-.6 1.1-1.8 2.3M6.9 6.1A3 3 0 0 0 11 10.2M2 2l14 14"
+                fill="none" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
     `;
 }
@@ -1433,7 +1461,9 @@ export default class TextToolbar {
             return;
         }
 
-        const plainText = selection.toString();
+        const selectedContent = range.cloneContents();
+        const plainText = selectedContent.querySelector('shortcode')
+            ? shortcodePlainText(selectedContent) : selection.toString();
         const lines = plainText.replace(/\r\n?/g, '\n').split('\n');
 
         if (/^H[1-6]$/.test(editable.tagName)) {
@@ -1444,7 +1474,7 @@ export default class TextToolbar {
             beforeRange.selectNodeContents(editable);
             beforeRange.setEnd(range.startContainer, range.startOffset);
             container.append(beforeRange.cloneContents());
-            const beforeHtml = container.innerHTML;
+            const beforeHtml = serializeShortcodes(container);
 
             container.replaceChildren();
             afterRange.selectNodeContents(editable);
@@ -1454,7 +1484,7 @@ export default class TextToolbar {
             if (this.#runExternalFormattingCommand('clearFormatting', {
                 plainText,
                 beforeHtml,
-                afterHtml: container.innerHTML
+                afterHtml: serializeShortcodes(container)
             })) {
                 return;
             }
@@ -1471,9 +1501,9 @@ export default class TextToolbar {
             }
 
             if (line) {
-                const textNode = document.createTextNode(line);
-                fragment.append(textNode);
-                insertedNodes.push(textNode);
+                const content = shortcodeTextFragment(line);
+                insertedNodes.push(...content.childNodes);
+                fragment.append(content);
             }
         });
 
@@ -2135,6 +2165,47 @@ export default class TextToolbar {
             range.collapse(false);
         }
 
+        const startElement = range.startContainer.nodeType === Node.ELEMENT_NODE
+            ? range.startContainer : range.startContainer.parentElement;
+        const shortcodeCaret = startElement?.closest('[data-vhd-shortcode-caret]');
+
+        /*
+         * The invisible caret placed after a protected shortcode is only an
+         * editing aid. After Enter, browsers may clone it onto the new line.
+         * Always insert outside that narrow marker so block shortcodes cannot
+         * become children of its three-pixel box.
+         */
+        if (shortcodeCaret && this.activeEditable.contains(shortcodeCaret)) {
+            range.setStartAfter(shortcodeCaret);
+            range.collapse(true);
+        }
+        const token = startElement?.closest('[data-vhd-shortcode]');
+        if (token) {
+            range.setStartAfter(token);
+            range.collapse(true);
+        }
+
+        if (html) {
+            const rangeElement = range.startContainer.nodeType === Node.ELEMENT_NODE
+                ? range.startContainer
+                : range.startContainer.parentElement;
+            const emptyLine = rangeElement?.closest?.('p, div');
+            const placeholderOnly = emptyLine
+                && emptyLine !== this.activeEditable
+                && this.activeEditable.contains(emptyLine)
+                && emptyLine.textContent.replace(/\u200b/g, '').trim() === ''
+                && [...emptyLine.childNodes].every(node =>
+                    (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR')
+                    || (node.nodeType === Node.TEXT_NODE && node.textContent.replace(/\u200b/g, '') === '')
+                );
+
+            if (placeholderOnly) {
+                emptyLine.replaceChildren();
+                range.setStart(emptyLine, 0);
+                range.collapse(true);
+            }
+        }
+
         range.deleteContents();
 
         let lastNode;
@@ -2211,6 +2282,63 @@ export default class TextToolbar {
         this.activeEditable.focus();
         this.updateActiveStates();
         return true;
+    }
+
+    setShortcodeMode(mode) {
+        if (!this.shortcodeModeButton) {
+            return;
+        }
+
+        const rendered = mode === 'rendered';
+        const label = rendered
+            ? this.t.shortcodes.rendered
+            : this.t.shortcodes.source;
+        this.shortcodeModeButton.dataset.mode = rendered ? 'rendered' : 'shortcode';
+        this.shortcodeModeButton.innerHTML = shortcodeModeIcon(
+            rendered ? 'rendered' : 'shortcode'
+        );
+        this.shortcodeModeButton.title = label;
+        this.shortcodeModeButton.setAttribute('aria-label', label);
+        this.shortcodeModeButton.setAttribute('aria-pressed', String(rendered));
+        this.shortcodeModeButton.classList.toggle('is-active', rendered);
+    }
+
+    #shortcodeModeControl() {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'vhd-toolbar-button vhd-shortcode-mode-button';
+        button.disabled = !this.actions.canRenderShortcodes;
+
+        if (button.disabled) {
+            button.title = this.t.shortcodes.unavailable;
+            button.setAttribute('aria-label', this.t.shortcodes.unavailable);
+        }
+
+        button.addEventListener('mousedown', event => {
+            this.#saveSelection();
+            event.preventDefault();
+        });
+
+        button.addEventListener('click', () => {
+            if (button.disabled) {
+                return;
+            }
+
+            const mode = button.dataset.mode === 'rendered'
+                ? 'shortcode'
+                : 'rendered';
+            this.actions.setShortcodeMode?.(mode);
+        });
+
+        this.shortcodeModeButton = button;
+        this.setShortcodeMode(this.actions.shortcodeMode || 'shortcode');
+
+        if (button.disabled) {
+            button.title = this.t.shortcodes.unavailable;
+            button.setAttribute('aria-label', this.t.shortcodes.unavailable);
+        }
+
+        return button;
     }
 
     #customActionsDropdown() {
@@ -2997,6 +3125,7 @@ export default class TextToolbar {
                 : []),
 
             // Output / preview
+            this.#toolbarItem('shortcodeMode', this.#shortcodeModeControl()),
             this.#toolbarItem(
                 'exportJson',
                 this.#actionButton(

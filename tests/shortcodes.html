@@ -1,0 +1,114 @@
+<!doctype html><meta charset="utf-8"><title>Shortcode regression tests</title>
+<link rel="stylesheet" href="../src/html-designer.css">
+<pre id="result">Running…</pre>
+<script type="module">
+try {
+ const result=await (async()=>{
+const {default:HtmlDesigner}=await import('../src/HtmlDesigner.js?v=0.7.72');
+const root=document.createElement('div');document.body.append(root);
+const token='<shortcode>{USER_NAME}</shortcode>';
+const legacy='<pdf_id>{PDF_ID_}2271{_PDF_ID}</pdf_id><mp3_id>{MP3_ID_}2405{_MP3_ID}</mp3_id><gal_id>{GAL_ID_}44{_GAL_ID}</gal_id><url_id>{URL_ID_}522{_URL_ID}</url_id><form_id>{FORM_ID_}623{_FORM_ID}</form_id><product_id>{PRODUCT_ID_}8{_PRODUCT_ID}</product_id>';
+const renderCalls=[];
+const editor=new HtmlDesigner(root,{html:`<p>Hello <b>${token}</b>!</p><div><shortcode>{ARTICLES}</shortcode></div><div>${legacy}</div><h2>Title ${token}</h2><table><tbody><tr><td>${token}</td></tr></tbody></table>`, shortcodeTags:['pdf_id','mp3_id','mp32_id','mp33_id','gal_id','url_id','form_id','product_id'],renderShortcode: async(source,context)=>{renderCalls.push({source,context});return '<b>RENDER ONLY</b>'},shortcodeDisplay:(s,c)=>c.tagName==='shortcode'&&s!=='{ARTICLES}'?'inline':'block'});
+const check=(v,m)=>{if(!v)throw Error(m)};
+const select=(el,all=false)=>{el.focus();const r=document.createRange();r.selectNodeContents(el);if(!all)r.collapse(false);getSelection().removeAllRanges();getSelection().addRange(r);editor.editor.textToolbar.setActiveEditable(el);editor.editor.textToolbar.savedRange=r.cloneRange();};
+check(root.querySelectorAll('shortcode').length===4,'import tokens');check(editor.getHtml().includes(token),'export');
+check([...root.querySelectorAll('shortcode')].every(e=>e.contentEditable==='false'),'protected');
+check([...root.querySelectorAll('pdf_id,mp3_id,gal_id,url_id,form_id,product_id')].every(e=>e.contentEditable==='false'),'legacy protected');
+check(editor.getHtml().includes(legacy),'legacy export preserved');
+editor.setShortcodeMode('rendered');await new Promise(r=>setTimeout(r,50));
+const firstPreview=root.querySelector('shortcode [data-vhd-shortcode-preview]');
+check(firstPreview,'rendered');
+check(firstPreview.querySelector('b')?.textContent==='RENDER ONLY' && !root.querySelector('iframe'),'direct preview content');
+const pdfCall=renderCalls.find(call=>call.context.tagName==='pdf_id');
+check(pdfCall?.source==='{PDF_ID_}2271{_PDF_ID}' && pdfCall.context.type==='pdf_id','legacy renderer type');
+check(pdfCall?.context.html==='<pdf_id>{PDF_ID_}2271{_PDF_ID}</pdf_id>','legacy renderer html');
+const pdfElement=root.querySelector('pdf_id');
+check(pdfElement.style.width==='100%' && pdfElement.firstElementChild.style.width==='100%','block preview width');
+check(pdfElement.querySelector('[data-vhd-shortcode-preview]')?.style.width==='100%','direct block preview width');
+check([...root.querySelectorAll('pdf_id,mp3_id,gal_id,url_id,form_id,product_id')].every(item=>item.style.display==='block'&&item.style.width==='100%'),'legacy full-width blocks');
+let el=root.querySelector('.vhd-editable-text');select(el);editor.insertAtCursor('<shortcode>{NEW}</shortcode>',{html:true});check(editor.getHtml().includes('<shortcode>{NEW}</shortcode>'),'insert');check(!JSON.stringify(editor.getData()).includes('data-vhd-shortcode'),'metadata leak');check(!editor.getHtml().includes('RENDER ONLY'),'preview leak');
+editor.undo();check(!editor.getHtml().includes('{NEW}'),'undo');editor.redo();check(editor.getHtml().includes('{NEW}'),'redo');
+el=root.querySelector('.vhd-editable-text');select(el,true);root.querySelector('[data-vhd-toolbar-key="clearFormatting"]').click();check(editor.getHtml().includes(token),'clear formatting');check(editor.getHtml().includes('{NEW}'),'clear new');
+select(el,true);const clip=new DataTransfer();el.dispatchEvent(new ClipboardEvent('copy',{bubbles:true,clipboardData:clip}));check(clip.getData('text/plain').includes(token),'copy');
+select(el);el.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,clipboardData:clip}));check((editor.getHtml().match(/\{NEW\}/g)||[]).length===2,'paste');
+select(el,true);el.dispatchEvent(new ClipboardEvent('cut',{bubbles:true,clipboardData:clip}));check(!editor.getHtml().includes('{NEW}'),'cut');editor.undo();check(editor.getHtml().includes('{NEW}'),'undo cut');
+const heading=root.querySelector('h2[contenteditable]');select(heading,true);root.querySelector('[data-vhd-toolbar-key="clearFormatting"]').click();check(editor.getHtml().includes('Title <shortcode>{USER_NAME}</shortcode>'),'heading clear');
+const td=root.querySelector('td[contenteditable]');td.append(document.createTextNode('cell'));td.dispatchEvent(new InputEvent('input',{bubbles:true}));check(!editor.getHtml().includes('data-vhd-shortcode'),'table persistence');
+const data=editor.getData();editor.load(data);check(editor.getHtml().includes(token),'reload');editor.setShortcodeMode('shortcode');check(!root.querySelector('[data-vhd-shortcode-preview]'),'switch');
+check(root.querySelector('pdf_id span').shadowRoot.querySelector('span span').style.whiteSpace==='nowrap','block source no wrap');
+editor.editor.options.renderShortcode=()=>Promise.reject(Error('offline'));editor.setShortcodeMode('rendered');await new Promise(r=>setTimeout(r,30));check(root.querySelector('shortcode span').shadowRoot.textContent.includes('{'),'fallback');
+editor.setShortcodeMode('shortcode');
+el=root.querySelector('.vhd-editable-text');select(el);
+editor.insertAtCursor('<shortcode>{KEYBOARD}</shortcode>',{html:true});
+el.dispatchEvent(new KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true,cancelable:true}));
+check(!editor.getHtml().includes('{KEYBOARD}'),'keyboard undo');
+root.querySelector('.vhd-editable-text').dispatchEvent(new KeyboardEvent('keydown',{key:'y',ctrlKey:true,bubbles:true,cancelable:true}));
+check(editor.getHtml().includes('{KEYBOARD}'),'keyboard redo');
+let complete;
+editor.editor.options.renderShortcode=()=>new Promise(resolve=>{complete=resolve});
+editor.setShortcodeMode('rendered');await Promise.resolve();
+editor.setShortcodeMode('shortcode');complete('<b>STALE</b>');await new Promise(r=>setTimeout(r,20));
+check(!root.querySelector('[data-vhd-shortcode-preview]'),'stale callback');
+for (const mode of ['shortcode', 'rendered']) {
+ editor.editor.options.renderShortcode=()=>'<b>Preview</b>';
+ editor.setShortcodeMode(mode);await new Promise(r=>setTimeout(r,20));
+ const tokenElement=root.querySelector('shortcode');
+ const tooltip=tokenElement.querySelector('span').shadowRoot.querySelector('[role="tooltip"]');
+ tokenElement.dispatchEvent(new PointerEvent('pointerenter'));
+ check(!tooltip.hidden && tooltip.getBoundingClientRect().width>0,'visible tooltip '+mode);
+ check(tooltip.textContent==='Shortcode : '+tokenElement.dataset.vhdShortcode,'tooltip source');
+ tokenElement.dispatchEvent(new PointerEvent('pointerleave'));check(tooltip.hidden,'hide tooltip');
+ tokenElement.focus();check(!tooltip.hidden,'keyboard tooltip');
+ tokenElement.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));check(tooltip.hidden,'dismiss tooltip');
+ check(!editor.getHtml().includes('shortcode-tooltip'),'tooltip export isolation');
+ tokenElement.blur();
+}
+const control=root.querySelector('[data-vhd-toolbar-key="shortcodeMode"]');
+const originalHtml=editor.getHtml();const originalData=JSON.stringify(editor.getData());
+editor.setShortcodeMode('rendered');control.click();
+check(editor.editor.shortcodes.mode==='shortcode','toolbar source mode');
+control.click();
+await new Promise(r=>setTimeout(r,20));
+check(root.querySelector('shortcode [data-vhd-shortcode-preview]'),'toolbar rendered mode');
+check(control.dataset.mode==='rendered' && control.getAttribute('aria-pressed')==='true','toolbar rendered state');
+check(editor.getHtml()===originalHtml && JSON.stringify(editor.getData())===originalData,'mode preserves source');
+editor.setShortcodeMode('shortcode');check(control.dataset.mode==='shortcode' && control.getAttribute('aria-pressed')==='false','API toolbar sync');
+editor.editor.textToolbar.actions.preview();await new Promise(r=>setTimeout(r,50));check(document.querySelector('.vhd-preview-content [data-vhd-shortcode-preview]'),'main preview always renders shortcodes');document.querySelector('.vhd-preview-dialog')?.close();
+el=root.querySelector('.vhd-editable-text');select(el);editor.insertAtCursor('<shortcode>{END}</shortcode>',{html:true});
+const endToken=[...el.querySelectorAll('shortcode')].find(item=>item.dataset.vhdShortcode==='{END}');
+check(endToken && !root.querySelector('[data-vhd-shortcode-caret]'),'atomic shortcode without marker');
+const clonedLine=document.createElement('div');el.append(clonedLine);const clonedRange=document.createRange();clonedRange.selectNodeContents(clonedLine);clonedRange.collapse(false);getSelection().removeAllRanges();getSelection().addRange(clonedRange);editor.editor.textToolbar.savedRange=clonedRange.cloneRange();
+editor.insertAtCursor('<mp3_id>{MP3_ID_}2405{_MP3_ID}</mp3_id>',{html:true});
+check(clonedLine.querySelector(':scope > mp3_id'),'block shortcode inserts as atomic sibling');
+const placeholderLine=document.createElement('div');placeholderLine.append(document.createElement('br'));el.append(placeholderLine);const placeholderRange=document.createRange();placeholderRange.selectNodeContents(placeholderLine);placeholderRange.collapse(true);getSelection().removeAllRanges();getSelection().addRange(placeholderRange);editor.editor.textToolbar.savedRange=placeholderRange.cloneRange();editor.insertAtCursor('<pdf_id>{PDF_ID_}999{_PDF_ID}</pdf_id>',{html:true});check(placeholderLine.querySelector(':scope > pdf_id')&&!placeholderLine.querySelector('br'),'block shortcode replaces empty-line placeholder');
+const insertedPdf=placeholderLine.querySelector('pdf_id');const afterPdf=document.createElement('br');placeholderLine.append(afterPdf);const afterPdfRange=document.createRange();afterPdfRange.setStartAfter(insertedPdf);afterPdfRange.collapse(true);getSelection().removeAllRanges();getSelection().addRange(afterPdfRange);placeholderLine.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));check(!placeholderLine.querySelector('br')&&placeholderLine.nextElementSibling?.matches('p')&&placeholderLine.nextElementSibling.innerHTML==='<br>','enter after block shortcode creates one clean paragraph');
+const formToken=el.querySelector('form_id');const emptyLine=document.createElement('div');emptyLine.append(document.createElement('br'));formToken.before(emptyLine);const emptyLineRange=document.createRange();emptyLineRange.selectNodeContents(emptyLine);emptyLineRange.collapse(true);getSelection().removeAllRanges();getSelection().addRange(emptyLineRange);el.dispatchEvent(new KeyboardEvent('keydown',{key:'Delete',bubbles:true,cancelable:true}));check(!el.contains(emptyLine)&&el.contains(formToken),'delete removes empty line before shortcode');
+const urlToken=el.querySelector('url_id');const directBreak=document.createElement('br');urlToken.before(directBreak);const directBreakRange=document.createRange();directBreakRange.setStart(directBreak.parentNode,Array.from(directBreak.parentNode.childNodes).indexOf(directBreak)+1);directBreakRange.collapse(true);getSelection().removeAllRanges();getSelection().addRange(directBreakRange);el.dispatchEvent(new KeyboardEvent('keydown',{key:'Delete',bubbles:true,cancelable:true}));check(!el.contains(directBreak)&&el.contains(urlToken),'delete removes direct break before shortcode');
+const arrowParent=endToken.parentNode;const arrowIndex=Array.from(arrowParent.childNodes).indexOf(endToken);const arrowBefore=document.createRange();arrowBefore.setStart(arrowParent,arrowIndex);arrowBefore.collapse(true);getSelection().removeAllRanges();getSelection().addRange(arrowBefore);
+el.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));let arrowRange=getSelection().getRangeAt(0);check(arrowRange.startContainer===arrowParent&&arrowRange.startOffset===arrowIndex+1,'arrow right crosses shortcode');
+el.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}));arrowRange=getSelection().getRangeAt(0);check(arrowRange.startContainer===arrowParent&&arrowRange.startOffset===arrowIndex,'arrow left crosses shortcode');
+const inlinePair=document.createElement('p');inlinePair.innerHTML='<shortcode>{ADRESSE}</shortcode>   <shortcode>{EMAIL}</shortcode>';el.append(inlinePair);editor.editor.shortcodes.protect(inlinePair);const pairSpace=inlinePair.childNodes[1];const pairRange=document.createRange();pairRange.setStart(pairSpace,1);pairRange.collapse(true);getSelection().removeAllRanges();getSelection().addRange(pairRange);
+inlinePair.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));arrowRange=getSelection().getRangeAt(0);check(arrowRange.startContainer===pairSpace&&arrowRange.startOffset===1,'user spaces remain native keyboard positions');pairRange.setStart(pairSpace,pairSpace.textContent.length);pairRange.collapse(true);getSelection().removeAllRanges();getSelection().addRange(pairRange);inlinePair.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));arrowRange=getSelection().getRangeAt(0);const inlineEmail=inlinePair.querySelectorAll('shortcode')[1];check(arrowRange.startContainer===inlinePair&&arrowRange.startOffset===Array.from(inlinePair.childNodes).indexOf(inlineEmail)+1,'arrow crosses shortcode after user spaces');
+const wrappedPair=document.createElement('p');wrappedPair.innerHTML='<shortcode>{ADRESSE_WRAPPED}</shortcode><span> </span><shortcode>{EMAIL_WRAPPED}</shortcode>';el.append(wrappedPair);editor.editor.shortcodes.protect(wrappedPair);const wrappedSpace=wrappedPair.querySelector('span').firstChild;const wrappedRange=document.createRange();wrappedRange.setStart(wrappedSpace,0);wrappedRange.collapse(true);getSelection().removeAllRanges();getSelection().addRange(wrappedRange);wrappedPair.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));arrowRange=getSelection().getRangeAt(0);check(!arrowRange.startContainer.closest?.('[data-vhd-shortcode]'),'formatted user space is not skipped');
+const nbspPair=document.createElement('p');nbspPair.innerHTML='<shortcode>{ADRESSE_NBSP}</shortcode>&nbsp;<shortcode>{EMAIL_NBSP}</shortcode>';el.append(nbspPair);editor.editor.shortcodes.protect(nbspPair);const nbspText=nbspPair.childNodes[1];const nbspRange=document.createRange();nbspRange.setStart(nbspText,1);nbspRange.collapse(true);getSelection().removeAllRanges();getSelection().addRange(nbspRange);nbspPair.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));arrowRange=getSelection().getRangeAt(0);check(arrowRange.startContainer===nbspText&&arrowRange.startOffset===1,'non-breaking space remains a keyboard position');
+const terminalEmail=nbspPair.querySelectorAll('shortcode')[1];check(terminalEmail.nextSibling?.nodeType===Node.TEXT_NODE&&terminalEmail.nextSibling.textContent.startsWith('\u200b'),'terminal inline shortcode has a native caret anchor');check(!editor.getHtml().includes('\u200b'),'caret anchors are excluded from saved HTML');
+const textBeforeTokens=document.createElement('p');textBeforeTokens.textContent='pollenuit.';const tokensOnNextLine=document.createElement('p');tokensOnNextLine.innerHTML='<shortcode>{EMAIL_LINE}</shortcode> <shortcode>{TELEPHONE_LINE}</shortcode>';const textAfterTokens=document.createElement('p');textAfterTokens.textContent='Calyflore';el.append(textBeforeTokens,tokensOnNextLine,textAfterTokens);editor.editor.shortcodes.protect(tokensOnNextLine);const emailOnNextLine=tokensOnNextLine.querySelector('shortcode');const telephoneOnPreviousLine=tokensOnNextLine.querySelectorAll('shortcode')[1];const endOfText=document.createRange();endOfText.selectNodeContents(textBeforeTokens);endOfText.collapse(false);getSelection().removeAllRanges();getSelection().addRange(endOfText);textBeforeTokens.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true}));arrowRange=getSelection().getRangeAt(0);check(arrowRange.startContainer===tokensOnNextLine&&arrowRange.startOffset===Array.from(tokensOnNextLine.childNodes).indexOf(emailOnNextLine),'arrow right enters next paragraph before its shortcode');const startOfText=document.createRange();startOfText.selectNodeContents(textAfterTokens);startOfText.collapse(true);getSelection().removeAllRanges();getSelection().addRange(startOfText);textAfterTokens.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}));arrowRange=getSelection().getRangeAt(0);check(arrowRange.startContainer===tokensOnNextLine&&arrowRange.startOffset===Array.from(tokensOnNextLine.childNodes).indexOf(telephoneOnPreviousLine)+1,'arrow left enters previous paragraph after its shortcode');
+const emailToken=inlinePair.querySelectorAll('shortcode')[1];const insideTokenRange=document.createRange();insideTokenRange.selectNodeContents(emailToken);insideTokenRange.collapse(true);getSelection().removeAllRanges();getSelection().addRange(insideTokenRange);inlinePair.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true,cancelable:true}));arrowRange=getSelection().getRangeAt(0);check(arrowRange.startContainer===inlinePair&&arrowRange.startOffset===2,'arrow escapes shortcode-internal browser caret');
+const endRange=document.createRange();endRange.setStartAfter(endToken);endRange.collapse(true);getSelection().removeAllRanges();getSelection().addRange(endRange);
+el.dispatchEvent(new KeyboardEvent('keydown',{key:'Backspace',bubbles:true,cancelable:true}));
+check(!editor.getHtml().includes('{END}'),'end shortcode deletion');
+select(el);editor.insertAtCursor('<shortcode>{DELETE}</shortcode>',{html:true});const deleteToken=[...el.querySelectorAll('shortcode')].find(item=>item.dataset.vhdShortcode==='{DELETE}');const beforeRange=document.createRange();beforeRange.setStartBefore(deleteToken);beforeRange.collapse(true);getSelection().removeAllRanges();getSelection().addRange(beforeRange);el.dispatchEvent(new KeyboardEvent('keydown',{key:'Delete',bubbles:true,cancelable:true}));check(!editor.getHtml().includes('{DELETE}'),'forward shortcode deletion');
+const otherRoot=document.createElement('div');document.body.append(otherRoot);
+const other=new HtmlDesigner(otherRoot,{html:'<p><shortcode>{ADRESSE_DEFAULT}</shortcode></p>'});
+check(otherRoot.querySelector('shortcode').style.display==='inline-block'&&otherRoot.querySelector('shortcode').style.width==='auto','standalone generic shortcode stays inline by default');
+check(otherRoot.querySelector('[data-vhd-toolbar-key="shortcodeMode"]').disabled,'missing callback disables rendered control');
+const universalRoot=document.createElement('div');document.body.append(universalRoot);new HtmlDesigner(universalRoot,{html:'<p><pdf_id>{PDF_ID_}1{_PDF_ID}</pdf_id></p>'});check(!universalRoot.querySelector('[data-vhd-shortcode]'),'application-specific tags require explicit registration');
+return 'PASS import, inline/block, preview, export/JSON, insertion, undo/redo, formatting, copy/paste/cut, heading, table, load, mode, failure';
+ })();
+ document.querySelector('#result').textContent=result+'; keyboard undo/redo, stale callback';
+} catch(error) {
+ document.querySelector('#result').textContent='FAIL: '+error.stack;
+ throw error;
+}
+</script>

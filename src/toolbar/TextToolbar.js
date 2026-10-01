@@ -1261,11 +1261,11 @@ export default class TextToolbar {
         const customActions = this.element.querySelector(
             '[data-vhd-toolbar-key="customActions"]'
         );
+        const targetRow = customActions?.closest('.vhd-toolbar-row')
+            || this.element.querySelector('.vhd-toolbar-row-secondary');
 
-        if (customActions) {
-            this.element.insertBefore(button, customActions);
-        } else {
-            this.element.append(button);
+        if (targetRow) {
+            targetRow.insertBefore(button, customActions || null);
         }
 
         this.#cleanupToolbarSeparators();

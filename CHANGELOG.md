@@ -2190,6 +2190,8 @@ All notable changes to Vanilla HTML Designer will be documented in this file.
 
 - Strike-through, Superscript, Subscript, Text color, Background color and Letter spacing are now permanently visible on the first toolbar row.
 - The Additional formatting dropdown is no longer displayed because all of its commands are directly accessible.
+- The README now documents the current product instead of duplicating release history; toolbar, image-gallery and table details were moved to focused guides in `docs/`.
+- Runtime plugin toolbar buttons now insert correctly into the permanent second toolbar row.
 
 ## [0.7.78] - 2026-10-01
 

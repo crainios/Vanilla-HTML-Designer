@@ -33,7 +33,7 @@ A row contains between 1 and 6 columns. Column widths are relative integer propo
 
 ## Blocks
 
-Supported block types in version 0.1.0:
+Native block types:
 
 - `heading`
 - `text`
@@ -41,5 +41,7 @@ Supported block types in version 0.1.0:
 - `button`
 - `divider`
 - `spacer`
+- `table`
+- `raw-html`
 
 The JSON project remains the canonical editable representation. Generated HTML is an export, not the source format.

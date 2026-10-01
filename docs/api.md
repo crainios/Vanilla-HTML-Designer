@@ -9,7 +9,18 @@ const editor = new HtmlDesigner(selectorOrElement, options);
 Options:
 
 - `translations`: partial or complete translation object.
+- `html`: existing HTML imported when the editor starts.
+- `defaultFontFamily`: default editable-content font stack (`system-ui` by default).
+- `imageGalleryUrl`: fixed URL, function or async function used by the image gallery dialog.
 - `onImageSelect`: async callback returning `{ src, alt, title }`. When `title` is omitted or empty, the `alt` value is used by default.
+- `stickyToolbar`: set to `false` to disable the sticky toolbar.
+- `stickyToolbarOffset`: fixed application-header height in pixels.
+- `disabledToolbarButtons`: array of toolbar keys to hide.
+- `disabledContentBlocks`: array of native content types to hide from insertion menus.
+- `disabledSections`: array of section layouts to hide.
+- `customButtons`: host application toolbar actions.
+- `plugins`: plugin modules loaded at initialisation.
+- `shortcodeMode`, `shortcodeTags`, `shortcodeDisplay` and `renderShortcode`: protected-shortcode configuration.
 
 ## getData()
 
@@ -23,6 +34,10 @@ Returns generic web HTML generated from the current project.
 
 Loads a project object.
 
+## loadHtml(html)
+
+Imports existing HTML into the editable VHD project.
+
 ## undo()
 
 Restores the previous project state.
@@ -30,6 +45,28 @@ Restores the previous project state.
 ## redo()
 
 Restores the next project state.
+
+## insertAtCursor(content, options)
+
+Inserts plain text at the saved caret. Pass `{ html: true }` for trusted HTML.
+
+## insertImage(image)
+
+Inserts or updates an image using `{ src, alt, title }`. An omitted `title` defaults to
+`alt`.
+
+## openImageGallery() / closeImageGallery()
+
+Opens or closes the configured image-gallery dialog.
+
+## setStatus(message, type)
+
+Displays an application status in Properties. Supported types are `info`, `success` and
+`error`; use an empty message to clear it.
+
+## HtmlDesigner.renderJson(project)
+
+Returns final HTML from a project object or JSON string without creating an editor.
 
 
 ## Protected shortcodes

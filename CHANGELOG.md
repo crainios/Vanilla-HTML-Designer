@@ -1,3 +1,20 @@
+## [0.8.0] - 2026-10-01
+
+### Release highlights
+
+- First public-preview release of Vanilla HTML Designer.
+- Framework-free visual HTML editing built entirely with native JavaScript.
+- Component-based documents with responsive sections, columns, headings, text, images, buttons, dividers, spacers, tables, code and secured Free HTML blocks.
+- Rich-text editing with two permanent toolbar rows, paragraph formatting, configurable lists, quotations, inline images, drop caps, colours, spacing and indentation.
+- Extensible image-gallery, custom-action, shortcode and plugin integrations for host applications.
+- JSON project serialization, HTML import and export, document preview, undo and redo.
+- Special paste modes for Markdown, sanitized HTML, plain text and document-style content.
+- English and French interfaces and documentation.
+
+### Changed
+
+- Promoted the current feature set from 0.7.79 to 0.8.0 for its first coordinated public presentation.
+
 ## [0.7.55] - 2026-09-29
 
 ### Changed

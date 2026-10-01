@@ -1,9 +1,9 @@
-import Shortcodes, { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from './Shortcodes.js?v=0.7.79';
+import Shortcodes, { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from './Shortcodes.js?v=0.8.0';
 import Grid from '../layout/Grid.js';
 import BlockFactory from '../blocks/BlockFactory.js';
 import Serializer from './Serializer.js';
 import History from './History.js';
-import TextToolbar from '../toolbar/TextToolbar.js?v=0.7.79';
+import TextToolbar from '../toolbar/TextToolbar.js?v=0.8.0';
 import HtmlImporter from './HtmlImporter.js';
 import { sanitizeHtml } from './HtmlSanitizer.js';
 

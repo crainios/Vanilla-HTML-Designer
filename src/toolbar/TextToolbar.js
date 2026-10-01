@@ -1,4 +1,4 @@
-import { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from '../core/Shortcodes.js?v=0.7.79';
+import { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from '../core/Shortcodes.js?v=0.8.0';
 import { VERSION } from '../version.js';
 import emojiCategories from './EmojiData.js';
 import specialCharacterCategories from './SpecialCharacterData.js';

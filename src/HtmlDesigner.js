@@ -1,4 +1,4 @@
-import Editor from './core/Editor.js?v=0.7.79';
+import Editor from './core/Editor.js?v=0.8.0';
 import Serializer from './core/Serializer.js';
 import BlockFactory from './blocks/BlockFactory.js';
 import EventBus from './core/EventBus.js';

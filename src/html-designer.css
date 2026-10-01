@@ -1075,12 +1075,12 @@
 
 .vhd-properties {
     position: sticky;
-    top: calc(var(--vhd-toolbar-sticky-offset, 0px) + 62px);
+    top: calc(var(--vhd-toolbar-sticky-offset, 0px) + 82px);
     padding: 12px;
     background: var(--vhd-surface);
     border: 1px solid var(--vhd-border);
     border-radius: var(--vhd-radius);
-    max-height: calc(100vh - var(--vhd-toolbar-sticky-offset, 0px) - 74px);
+    max-height: calc(100vh - var(--vhd-toolbar-sticky-offset, 0px) - 94px);
     overflow-y: auto;
 }
 
@@ -1156,6 +1156,15 @@
 
 .vhd-property-field input[type="color"] {
     padding: 2px;
+}
+
+.vhd-editable-text p.vhd-drop-cap::first-letter {
+    float: left;
+    margin: var(--vhd-drop-cap-offset, 0) var(--vhd-drop-cap-spacing, 6px) 0 0;
+    color: var(--vhd-drop-cap-color, #1f2937);
+    font-size: var(--vhd-drop-cap-size, 3em);
+    font-weight: 700;
+    line-height: var(--vhd-drop-cap-line-height, .72);
 }
 
 .vhd-selected {
@@ -1930,7 +1939,7 @@
 }
 
 .vhd.vhd-fullscreen .vhd-workspace {
-    height: calc(100vh - 52px);
+    height: calc(100vh - 72px);
     overflow: hidden;
 }
 
@@ -3250,6 +3259,33 @@ body.vhd-row-dragging {
 .vhd-text-toolbar {
     position: sticky;
     z-index: 21;
+}
+
+/* 0.7.78 — permanent two-row main toolbar */
+.vhd-text-toolbar {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 3px;
+}
+
+.vhd-toolbar-row {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 3px;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+}
+
+.vhd-toolbar-row:has(.vhd-toolbar-menu:not([hidden])) {
+    z-index: 2;
+    overflow: visible;
 }
 
 /*

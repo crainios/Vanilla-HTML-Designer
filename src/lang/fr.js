@@ -44,6 +44,7 @@ export default {
         fontSize: 'Taille des caractères',
         fontFamily: 'Police de caractères',
         paragraph: 'Paragraphe',
+        dropCap: 'Lettrine',
         heading1: 'Titre 1',
         heading2: 'Titre 2',
         heading3: 'Titre 3',
@@ -214,7 +215,12 @@ export default {
         removeLink: 'Supprimer le lien',
         advanced: 'Avancé',
         rawHtmlCode: 'Code HTML',
-        rawHtmlHelp: 'Le code est nettoyé avant son aperçu et son export. Les scripts, formulaires, événements et ressources dangereuses sont supprimés.'
+        rawHtmlHelp: 'Le code est nettoyé avant son aperçu et son export. Les scripts, formulaires, événements et ressources dangereuses sont supprimés.',
+        dropCap: 'Lettrine',
+        dropCapLines: 'Nombre de lignes',
+        dropCapColor: 'Couleur',
+        dropCapSpacing: 'Espacement avec le texte',
+        removeDropCap: 'Supprimer la lettrine'
     },
     editor: {
         empty: 'Ajoutez une première ligne pour commencer.',

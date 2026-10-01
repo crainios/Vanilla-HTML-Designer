@@ -44,6 +44,7 @@ export default {
         fontSize: 'Font size',
         fontFamily: 'Font family',
         paragraph: 'Paragraph',
+        dropCap: 'Drop cap',
         heading1: 'Heading 1',
         heading2: 'Heading 2',
         heading3: 'Heading 3',
@@ -214,7 +215,12 @@ export default {
         removeLink: 'Remove link',
         advanced: 'Advanced',
         rawHtmlCode: 'HTML code',
-        rawHtmlHelp: 'The code is sanitised before preview and export. Scripts, forms, events and unsafe resources are removed.'
+        rawHtmlHelp: 'The code is sanitised before preview and export. Scripts, forms, events and unsafe resources are removed.',
+        dropCap: 'Drop cap',
+        dropCapLines: 'Number of lines',
+        dropCapColor: 'Colour',
+        dropCapSpacing: 'Spacing from text',
+        removeDropCap: 'Remove drop cap'
     },
     editor: {
         empty: 'Add a first row to start.',

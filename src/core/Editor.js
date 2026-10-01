@@ -1,9 +1,9 @@
-import Shortcodes, { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from './Shortcodes.js?v=0.7.72';
+import Shortcodes, { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from './Shortcodes.js?v=0.7.79';
 import Grid from '../layout/Grid.js';
 import BlockFactory from '../blocks/BlockFactory.js';
 import Serializer from './Serializer.js';
 import History from './History.js';
-import TextToolbar from '../toolbar/TextToolbar.js?v=0.7.72';
+import TextToolbar from '../toolbar/TextToolbar.js?v=0.7.79';
 import HtmlImporter from './HtmlImporter.js';
 import { sanitizeHtml } from './HtmlSanitizer.js';
 
@@ -2401,6 +2401,182 @@ export default class Editor {
                 ['straight', '" … "'],
                 ['none', this.t.properties.quoteMarksNone]
             ])
+        );
+    }
+
+    #applyDropCapStyles(paragraph) {
+        const lines = Math.min(
+            6,
+            Math.max(2, Math.round(Number(paragraph.dataset.vhdDropCapLines) || 3))
+        );
+        const color = paragraph.dataset.vhdDropCapColor || '#1f2937';
+        const spacing = Math.min(
+            40,
+            Math.max(0, Math.round(Number(paragraph.dataset.vhdDropCapSpacing) || 6))
+        );
+        const computed = window.getComputedStyle(paragraph);
+        const fontSize = Number.parseFloat(computed.fontSize) || 16;
+        const computedLineHeight = Number.parseFloat(computed.lineHeight);
+        const lineHeight = Number.isFinite(computedLineHeight)
+            ? computedLineHeight
+            : fontSize * 1.2;
+        const topOffset = Math.round(
+            Math.max(0, (lineHeight - fontSize) / 2) * 100
+        ) / 100;
+        const availableHeight = Math.max(
+            fontSize,
+            lines * lineHeight - topOffset
+        );
+        const firstCharacter = paragraph.textContent.trim().charAt(0);
+        let glyphRatio = .72;
+
+        if (firstCharacter) {
+            const context = document.createElement('canvas').getContext('2d');
+
+            if (context) {
+                context.font = [
+                    computed.fontStyle,
+                    '700',
+                    `${fontSize}px`,
+                    computed.fontFamily
+                ].join(' ');
+
+                const metrics = context.measureText(firstCharacter);
+                const glyphHeight =
+                    metrics.actualBoundingBoxAscent
+                    + metrics.actualBoundingBoxDescent;
+
+                if (Number.isFinite(glyphHeight) && glyphHeight > 0) {
+                    glyphRatio = Math.min(
+                        .95,
+                        Math.max(.5, glyphHeight / fontSize)
+                    );
+                }
+            }
+        }
+
+        const dropCapFontSize = Math.round(
+            availableHeight / glyphRatio * 100
+        ) / 100;
+
+        paragraph.classList.add('vhd-drop-cap');
+        paragraph.dataset.vhdDropCapLines = String(lines);
+        paragraph.dataset.vhdDropCapColor = color;
+        paragraph.dataset.vhdDropCapSpacing = String(spacing);
+        paragraph.style.setProperty('--vhd-drop-cap-size', `${dropCapFontSize}px`);
+        paragraph.style.setProperty('--vhd-drop-cap-line-height', String(glyphRatio));
+        paragraph.style.setProperty('--vhd-drop-cap-offset', `${topOffset}px`);
+        paragraph.style.setProperty('--vhd-drop-cap-color', color);
+        paragraph.style.setProperty('--vhd-drop-cap-spacing', `${spacing}px`);
+    }
+
+    #removeDropCap(paragraph) {
+        paragraph.classList.remove('vhd-drop-cap');
+        delete paragraph.dataset.vhdDropCapLines;
+        delete paragraph.dataset.vhdDropCapColor;
+        delete paragraph.dataset.vhdDropCapSpacing;
+        paragraph.style.removeProperty('--vhd-drop-cap-size');
+        paragraph.style.removeProperty('--vhd-drop-cap-line-height');
+        paragraph.style.removeProperty('--vhd-drop-cap-offset');
+        paragraph.style.removeProperty('--vhd-drop-cap-color');
+        paragraph.style.removeProperty('--vhd-drop-cap-spacing');
+
+        if (!paragraph.getAttribute('style')?.trim()) {
+            paragraph.removeAttribute('style');
+        }
+    }
+
+    #editableBlockContext(editable) {
+        const wrapper = editable?.closest?.('.vhd-block');
+        const rowIndex = Number(wrapper?.dataset.rowIndex);
+        const columnIndex = Number(wrapper?.dataset.columnIndex);
+        const blockIndex = Number(wrapper?.dataset.blockIndex);
+        const block = this.project?.rows?.[rowIndex]
+            ?.columns?.[columnIndex]?.blocks?.[blockIndex];
+
+        return { wrapper, block };
+    }
+
+    #selectDropCapProperties(paragraph, block, editable) {
+        this.#applyDropCapStyles(paragraph);
+
+        const panel = this.propertiesPanel;
+        panel.replaceChildren(
+            this.#createDocumentStatistics(),
+            this.#createStatusMessage()
+        );
+        this.#updateDocumentStatistics();
+        this.#updateStatusMessage();
+
+        const title = document.createElement('h3');
+        title.textContent = this.t.properties.dropCap;
+        panel.append(title);
+
+        const sync = () => {
+            this.#applyDropCapStyles(paragraph);
+            editable.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                inputType: 'formatDropCap',
+                data: null
+            }));
+        };
+
+        panel.append(
+            this.#propertyField(
+                this.t.properties.dropCapLines,
+                'number',
+                paragraph.dataset.vhdDropCapLines,
+                value => {
+                    paragraph.dataset.vhdDropCapLines = String(
+                        Math.min(6, Math.max(2, Math.round(Number(value) || 3)))
+                    );
+                    sync();
+                },
+                { min: 2, max: 6, step: 1 }
+            ),
+            this.#propertyField(
+                this.t.properties.dropCapColor,
+                'color',
+                paragraph.dataset.vhdDropCapColor,
+                value => {
+                    paragraph.dataset.vhdDropCapColor = value;
+                    sync();
+                }
+            ),
+            this.#propertyField(
+                this.t.properties.dropCapSpacing,
+                'number',
+                paragraph.dataset.vhdDropCapSpacing,
+                value => {
+                    paragraph.dataset.vhdDropCapSpacing = String(
+                        Math.min(40, Math.max(0, Math.round(Number(value) || 0)))
+                    );
+                    sync();
+                },
+                { min: 0, max: 40, step: 1 }
+            ),
+            this.#propertyAction(
+                this.t.properties.removeDropCap,
+                () => {
+                    this.#remember();
+                    this.#removeDropCap(paragraph);
+                    editable.dispatchEvent(new InputEvent('input', {
+                        bubbles: true,
+                        inputType: 'formatDropCap',
+                        data: null
+                    }));
+
+                    const context = this.#editableBlockContext(editable);
+
+                    if (context.wrapper && context.block) {
+                        this.#selectProperties(
+                            'block',
+                            context.block,
+                            context.wrapper
+                        );
+                    }
+                }
+            )
         );
     }
 
@@ -5164,6 +5340,14 @@ export default class Editor {
                 return;
             }
 
+            const dropCap = event.target.closest?.('p.vhd-drop-cap');
+
+            if (dropCap && element.contains(dropCap)) {
+                event.stopPropagation();
+                this.#selectDropCapProperties(dropCap, block, element);
+                return;
+            }
+
             this.#removeInlineImageResizeOverlay();
             this.root.querySelectorAll(
                 '.vhd-inline-image.is-selected'
@@ -5213,6 +5397,10 @@ export default class Editor {
             this.#hideSelectionMenu();
             syncTextPlaceholder();
             this.#remember();
+
+            element.querySelectorAll('p.vhd-drop-cap').forEach(paragraph => {
+                this.#applyDropCapStyles(paragraph);
+            });
 
             if (block.type === 'heading') {
                 const textAlign = element.style.textAlign;
@@ -6020,6 +6208,83 @@ export default class Editor {
     }
 
     #formatContextualSelection(command, value = null) {
+        if (command === 'dropCapToggle') {
+            const editable = this.textToolbar.activeEditable;
+
+            if (
+                !(editable instanceof HTMLElement)
+                || !editable.classList.contains('vhd-editable-text')
+                || editable.closest('.vhd-table-editor')
+            ) {
+                return true;
+            }
+
+            const selection = window.getSelection();
+
+            if (!selection?.rangeCount) {
+                return true;
+            }
+
+            const range = selection.getRangeAt(0);
+
+            if (!editable.contains(range.commonAncestorContainer)) {
+                return true;
+            }
+
+            let node = range.startContainer;
+
+            if (node === editable && node.nodeType === Node.ELEMENT_NODE) {
+                node = node.childNodes[
+                    Math.min(range.startOffset, node.childNodes.length - 1)
+                ] || node.firstChild;
+            }
+
+            const element = node?.nodeType === Node.TEXT_NODE
+                ? node.parentElement
+                : node;
+            const paragraph = element?.closest?.('p');
+
+            if (
+                !(paragraph instanceof HTMLParagraphElement)
+                || !editable.contains(paragraph)
+                || paragraph.closest('blockquote,li,pre')
+            ) {
+                return true;
+            }
+
+            this.#remember();
+
+            if (paragraph.classList.contains('vhd-drop-cap')) {
+                this.#removeDropCap(paragraph);
+            } else {
+                this.#applyDropCapStyles(paragraph);
+            }
+
+            editable.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                inputType: 'formatDropCap',
+                data: null
+            }));
+
+            const context = this.#editableBlockContext(editable);
+
+            if (paragraph.classList.contains('vhd-drop-cap')) {
+                this.#selectDropCapProperties(
+                    paragraph,
+                    context.block,
+                    editable
+                );
+            } else if (context.wrapper && context.block) {
+                this.#selectProperties(
+                    'block',
+                    context.block,
+                    context.wrapper
+                );
+            }
+
+            return true;
+        }
+
         if (command === 'clearFormatting') {
             const editable = this.textToolbar.activeEditable;
             const wrapper = editable?.closest?.('.vhd-block');

@@ -67,7 +67,8 @@ Each row can use a different layout without affecting the others.
   - links
   - blockquote
   - alignment
-  - text color
+- text color
+- paragraph drop caps with configurable size, colour and spacing
 - Reordering and deletion
 - Undo / redo
 - JSON import/export
@@ -786,13 +787,13 @@ URLs and other block properties are not included.
 The character toolbar includes compact `x²` and `x₂` controls for semantic
 `<sup>` and `<sub>` formatting.
 
-The Alignment dropdown also contains:
+The second toolbar row displays these commands directly:
 
 - Decrease indent
 - Increase indent
 
-Indentation uses the browser editing model so it works with paragraphs and list
-items while preserving the current selection.
+Indentation works with paragraphs and list items while preserving the current
+selection. The same row also provides a dedicated Drop cap toggle.
 
 These controls can be hidden independently:
 
@@ -813,7 +814,7 @@ it uses `margin-left` in 2rem steps and never creates a `<blockquote>`.
 List indentation remains structural so nested lists continue to use semantic list markup.
 
 
-## Grouped secondary formatting
+## Visible character formatting
 
 Since 0.6.53 the main character toolbar keeps the most common controls directly visible:
 
@@ -823,16 +824,17 @@ Since 0.6.53 the main character toolbar keeps the most common controls directly 
 - Font family
 - Font size
 
-Less frequent formatting commands are grouped in **More formatting**:
+The first toolbar row also keeps these formatting commands directly visible:
 
 - Strike
 - Superscript
 - Subscript
 - Text color
 - Text background color
+- Letter spacing
 
 The existing `disabledToolbarButtons` keys for these commands remain valid and are
-applied inside the dropdown.
+applied to their individual toolbar controls.
 
 
 ## Visual image resizing

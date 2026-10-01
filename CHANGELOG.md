@@ -2184,6 +2184,58 @@ All notable changes to Vanilla HTML Designer will be documented in this file.
 - External image picker hook.
 - English fallback and French translation.
 - Standalone demo.
+## [0.7.79] - 2026-10-01
+
+### Changed
+
+- Strike-through, Superscript, Subscript, Text color, Background color and Letter spacing are now permanently visible on the first toolbar row.
+- The Additional formatting dropdown is no longer displayed because all of its commands are directly accessible.
+
+## [0.7.78] - 2026-10-01
+
+### Changed
+
+- The main toolbar now uses two permanent rows: text formatting and insertion commands on the first row, paragraph and output commands on the second.
+- Decrease indent, Increase indent and Drop cap are now directly visible buttons on the second row.
+- Drop cap was removed from the Paragraph selector and its dedicated button reflects the active paragraph state.
+- Each toolbar row stays on one line and scrolls horizontally when the available width is too small.
+
+## [0.7.77] - 2026-09-30
+
+### Fixed
+
+- Drop-cap sizing now measures the visible glyph in its actual font instead of assuming that the glyph fills the entire CSS font box.
+- Visible letter height and float height are calculated separately, allowing letters such as S and C to fill the requested lines without adding an extra wrapped line.
+
+## [0.7.76] - 2026-09-30
+
+### Fixed
+
+- Drop caps now include the paragraph's upper typographic leading so their visible top aligns with the first text line.
+- The letter height is reduced by the same offset, preserving the requested total line count without extending the float.
+
+## [0.7.75] - 2026-09-30
+
+### Fixed
+
+- Drop-cap fallback height is now calculated from the paragraph's actual computed line height.
+- Changing paragraph line height automatically recalculates its drop cap, so the requested line count remains accurate.
+
+## [0.7.74] - 2026-09-30
+
+### Fixed
+
+- Drop-cap text wrapping now occupies the requested two-to-six lines instead of using an undersized floating line box.
+- Browsers supporting `initial-letter` use native line sinking, with a corrected line-height fallback for other browsers.
+
+## [0.7.73] - 2026-09-30
+
+### Added
+
+- Added paragraph drop caps from the Paragraph menu.
+- Drop-cap properties provide a two-to-six-line size, colour, text spacing and an explicit removal action.
+- Drop caps remain part of the editable HTML and are styled consistently in the editor and published content.
+
 ## [0.7.72] - 2026-09-30
 
 ### Changed

@@ -1,4 +1,4 @@
-import { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from '../core/Shortcodes.js?v=0.7.72';
+import { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from '../core/Shortcodes.js?v=0.7.79';
 import { VERSION } from '../version.js';
 import emojiCategories from './EmojiData.js';
 import specialCharacterCategories from './SpecialCharacterData.js';
@@ -30,6 +30,16 @@ function indentIcon(type) {
                 stroke="currentColor"
                 stroke-width="2"
                 stroke-linecap="round"/>
+        </svg>
+    `;
+}
+
+function dropCapIcon() {
+    return `
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+            <path d="M3 5h8v2H8v12H6V7H3V5z" fill="currentColor"/>
+            <path d="M12 7h9M12 12h9M12 17h9"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
         </svg>
     `;
 }
@@ -363,35 +373,37 @@ export default class TextToolbar {
     }
 
     #cleanupToolbarSeparators() {
-        const children = Array.from(this.element.children);
+        this.element.querySelectorAll('.vhd-toolbar-row').forEach(row => {
+            const children = Array.from(row.children);
 
-        const isVisibleItem = element =>
-            !element.hidden
-            && !element.classList.contains('vhd-toolbar-separator');
+            const isVisibleItem = element =>
+                !element.hidden
+                && !element.classList.contains('vhd-toolbar-separator');
 
-        children.forEach((element, index) => {
-            if (!element.classList.contains('vhd-toolbar-separator')) {
-                return;
-            }
+            children.forEach((element, index) => {
+                if (!element.classList.contains('vhd-toolbar-separator')) {
+                    return;
+                }
 
-            const hasVisibleBefore = children
-                .slice(0, index)
-                .reverse()
-                .some(isVisibleItem);
+                const hasVisibleBefore = children
+                    .slice(0, index)
+                    .reverse()
+                    .some(isVisibleItem);
 
-            const hasVisibleAfter = children
-                .slice(index + 1)
-                .some(isVisibleItem);
+                const hasVisibleAfter = children
+                    .slice(index + 1)
+                    .some(isVisibleItem);
 
-            const previousVisible = children
-                .slice(0, index)
-                .reverse()
-                .find(element => !element.hidden);
+                const previousVisible = children
+                    .slice(0, index)
+                    .reverse()
+                    .find(element => !element.hidden);
 
-            element.hidden =
-                !hasVisibleBefore
-                || !hasVisibleAfter
-                || previousVisible?.classList.contains('vhd-toolbar-separator');
+                element.hidden =
+                    !hasVisibleBefore
+                    || !hasVisibleAfter
+                    || previousVisible?.classList.contains('vhd-toolbar-separator');
+            });
         });
     }
 
@@ -978,6 +990,18 @@ export default class TextToolbar {
                 label: value,
                 icon: `<span style="line-height:${value}">A≡</span>`,
                 action: () => this.#applyLineHeight(value)
+            }))
+        );
+    }
+
+    #letterSpacingDropdown() {
+        return this.#dropdown(
+            this.t.toolbar.letterSpacing,
+            '<span class="vhd-toolbar-letter-spacing-icon">A↔</span>',
+            ['0', '0.5', '1', '2', '3'].map(value => ({
+                label: `${value} px`,
+                icon: `<span style="letter-spacing:${value}px">Ab</span>`,
+                action: () => this.#applyLetterSpacing(value)
             }))
         );
     }
@@ -2907,12 +2931,8 @@ export default class TextToolbar {
         });
         backgroundColorControl.append(backgroundColor);
 
-        const additionalFormatting = this.#additionalFormattingDropdown(
-            colorControl,
-            backgroundColorControl
-        );
-
         const lineHeight = this.#lineHeightDropdown();
+        const letterSpacing = this.#letterSpacingDropdown();
 
         const lists = this.#dropdown(
             this.t.toolbar.lists,
@@ -2990,25 +3010,7 @@ export default class TextToolbar {
                     label: this.t.toolbar.justify,
                     icon: alignmentIcon('justify'),
                     action: () => this.#applyAlignment('justify')
-                },
-                ...(
-                    this.disabledToolbarButtons.has('outdent')
-                        ? []
-                        : [{
-                            label: this.t.toolbar.outdent,
-                            icon: indentIcon('outdent'),
-                            action: () => this.#applyIndent('outdent')
-                        }]
-                ),
-                ...(
-                    this.disabledToolbarButtons.has('indent')
-                        ? []
-                        : [{
-                            label: this.t.toolbar.indent,
-                            icon: indentIcon('indent'),
-                            action: () => this.#applyIndent('indent')
-                        }]
-                )
+                }
             ],
             'alignment'
         );
@@ -3037,6 +3039,27 @@ export default class TextToolbar {
             '❝'
         );
 
+        this.dropCapButton = this.#actionButton(
+            this.t.toolbar.dropCap,
+            () => {
+                this.#restoreSelection();
+                this.#runExternalFormattingCommand('dropCapToggle');
+            },
+            dropCapIcon()
+        );
+
+        const outdentButton = this.#actionButton(
+            this.t.toolbar.outdent,
+            () => this.#applyIndent('outdent'),
+            indentIcon('outdent')
+        );
+
+        const indentButton = this.#actionButton(
+            this.t.toolbar.indent,
+            () => this.#applyIndent('indent'),
+            indentIcon('indent')
+        );
+
         const customActions = this.#customActionsDropdown();
 
         const versionBadge = document.createElement('button');
@@ -3047,7 +3070,13 @@ export default class TextToolbar {
         versionBadge.innerHTML = brandLogoIcon();
         versionBadge.addEventListener('click', () => this.#showAboutDialog());
 
-        this.element.append(
+        const firstRow = document.createElement('div');
+        firstRow.className = 'vhd-toolbar-row vhd-toolbar-row-primary';
+
+        const secondRow = document.createElement('div');
+        secondRow.className = 'vhd-toolbar-row vhd-toolbar-row-secondary';
+
+        firstRow.append(
             // Paste at the current caret position
             this.#toolbarItem('pasteSpecial', this.#pasteSpecialDropdown()),
             this.#separator(),
@@ -3070,7 +3099,28 @@ export default class TextToolbar {
             this.#toolbarItem('bold', this.#button(this.t.toolbar.bold, 'bold', null, '<strong>B</strong>')),
             this.#toolbarItem('italic', this.#button(this.t.toolbar.italic, 'italic', null, '<em>I</em>')),
             this.#toolbarItem('underline', this.#button(this.t.toolbar.underline, 'underline', null, '<u>U</u>')),
-            this.#toolbarItem('moreFormatting', additionalFormatting),
+            this.#toolbarItem('strike', this.#button(this.t.toolbar.strike, 'strikeThrough', null, '<s>S</s>')),
+            this.#toolbarItem(
+                'superscript',
+                this.#button(
+                    this.t.toolbar.superscript,
+                    'superscript',
+                    null,
+                    '<span class="vhd-toolbar-script-icon">x<sup>2</sup></span>'
+                )
+            ),
+            this.#toolbarItem(
+                'subscript',
+                this.#button(
+                    this.t.toolbar.subscript,
+                    'subscript',
+                    null,
+                    '<span class="vhd-toolbar-script-icon">x<sub>2</sub></span>'
+                )
+            ),
+            this.#toolbarItem('textColor', colorControl),
+            this.#toolbarItem('backgroundColor', backgroundColorControl),
+            this.#toolbarItem('letterSpacing', letterSpacing),
             this.#toolbarItem('fontFamily', fontFamily),
             this.#toolbarItem('fontSize', fontSize),
             this.#separator(),
@@ -3105,8 +3155,10 @@ export default class TextToolbar {
                 )
             ),
             this.#toolbarItem('emoji', this.#emojiDropdown()),
-            this.#toolbarItem('specialCharacters', this.#specialCharacterDropdown()),
-            this.#separator(),
+            this.#toolbarItem('specialCharacters', this.#specialCharacterDropdown())
+        );
+
+        secondRow.append(
 
             // Paragraph formatting
             this.#toolbarItem('paragraph', format),
@@ -3114,6 +3166,9 @@ export default class TextToolbar {
             this.#toolbarItem('lists', lists),
             this.#toolbarItem('quote', this.quoteButton),
             this.#toolbarItem('alignment', alignment),
+            this.#toolbarItem('outdent', outdentButton),
+            this.#toolbarItem('indent', indentButton),
+            this.#toolbarItem('dropCap', this.dropCapButton),
             this.#separator(),
 
             // Host application extensions
@@ -3162,6 +3217,8 @@ export default class TextToolbar {
             // Version / identity — intentionally never disableable
             versionBadge
         );
+
+        this.element.append(firstRow, secondRow);
 
         this.#cleanupToolbarSeparators();
     }
@@ -3356,6 +3413,17 @@ export default class TextToolbar {
             const active = Boolean(quote);
             this.quoteButton.classList.toggle('is-active', active);
             this.quoteButton.setAttribute('aria-pressed', active ? 'true' : 'false');
+        }
+
+        const dropCap = ancestors.find(element =>
+            element.tagName.toLowerCase() === 'p'
+            && element.classList.contains('vhd-drop-cap')
+        );
+
+        if (this.dropCapButton) {
+            const active = Boolean(dropCap);
+            this.dropCapButton.classList.toggle('is-active', active);
+            this.dropCapButton.setAttribute('aria-pressed', active ? 'true' : 'false');
         }
 
         const list = ancestors.find(element => {

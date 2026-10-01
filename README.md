@@ -8,6 +8,10 @@ Vanilla HTML Designer (VHD) combines a structured JSON document model with clean
 portable HTML output. It is designed for host applications that need a visual editor
 without adopting a front-end framework.
 
+## Video demonstration
+
+[![Watch Vanilla HTML Designer in action](https://img.youtube.com/vi/9q2zI6bTcwM/maxresdefault.jpg)](https://www.youtube.com/watch?v=9q2zI6bTcwM)
+
 ## Highlights
 
 - Responsive sections with one to six columns

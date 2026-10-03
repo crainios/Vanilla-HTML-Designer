@@ -19,6 +19,8 @@ Options:
 - `disabledContentBlocks`: array of native content types to hide from insertion menus.
 - `disabledSections`: array of section layouts to hide.
 - `customButtons`: host application toolbar actions.
+- `compositeStyles`: optional initial array of reusable composite styles.
+- `onCompositeStylesChange(styles)`: callback invoked after a style is created, updated or deleted. The host application is responsible for persistence; VHD never stores composite styles in `localStorage`.
 - `plugins`: plugin modules loaded at initialisation.
 - `shortcodeMode`, `shortcodeTags`, `shortcodeDisplay` and `renderShortcode`: protected-shortcode configuration.
 

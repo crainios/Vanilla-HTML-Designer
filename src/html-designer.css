@@ -246,6 +246,19 @@
     outline: none;
 }
 
+/*
+ * Keep semantic paragraphs visually distinct even when the host page resets
+ * the browser's default <p> margins. A soft line break (Shift+Enter) remains
+ * unspaced because it is represented by a <br> inside the current paragraph.
+ */
+.vhd-editable-text > p {
+    margin: 1em 0 0;
+}
+
+.vhd-editable-text > p:first-child {
+    margin-top: 0;
+}
+
 .vhd-block-menu {
     display: flex;
     flex-wrap: wrap;
@@ -1893,6 +1906,55 @@
     font-variant-numeric: tabular-nums;
 }
 
+.vhd-composite-style-indicator {
+    display: grid;
+    gap: 3px;
+    margin-bottom: 14px;
+    padding: 9px 11px;
+    border: 1px solid #bfdbfe;
+    border-radius: var(--vhd-radius);
+    background: #eff6ff;
+}
+
+.vhd-composite-style-indicator[hidden] {
+    display: none;
+}
+
+.vhd-composite-style-label {
+    color: #1d4ed8;
+    font-size: .75rem;
+    font-weight: 600;
+}
+
+.vhd-composite-style-indicator strong {
+    color: #1e3a8a;
+    font-size: .88rem;
+}
+
+.vhd-composite-style-status {
+    color: #15803d;
+    font-size: .75rem;
+}
+
+.vhd-composite-style-status.is-outdated {
+    color: #b45309;
+}
+
+.vhd-composite-style-status.is-missing {
+    color: #b91c1c;
+}
+
+.vhd-composite-style-actions {
+    display: grid;
+    gap: 5px;
+    margin-top: 5px;
+}
+
+.vhd-composite-style-actions .vhd-secondary-button {
+    width: 100%;
+    white-space: normal;
+}
+
 
 /* 0.6.45 — properties-driven media/content controls */
 .vhd-property-action {
@@ -3457,6 +3519,25 @@ body.vhd-row-dragging {
 .vhd-editable-text pre.vhd-code:focus-within {
     border-color: var(--vhd-accent);
     outline: 2px solid rgba(37, 99, 235, .12);
+}
+
+.vhd-editable-text .vhd-code-caret {
+    display: block;
+    position: relative;
+    z-index: 1;
+    height: 14px;
+    min-height: 0;
+    margin: 0 0 -14px;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    font-size: 0;
+    line-height: 0;
+    cursor: text;
+}
+
+.vhd-editable-text .vhd-code-caret::after {
+    content: none;
 }
 
 

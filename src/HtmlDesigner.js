@@ -1,10 +1,10 @@
-import Editor from './core/Editor.js?v=0.8.0';
+import Editor from './core/Editor.js?v=0.8.24';
 import Serializer from './core/Serializer.js';
 import BlockFactory from './blocks/BlockFactory.js';
 import EventBus from './core/EventBus.js';
 import PluginManager from './core/PluginManager.js';
 import { VERSION } from './version.js';
-import en from './lang/en.js';
+import en from './lang/en.js?v=0.8.24';
 
 export default class HtmlDesigner {
     static renderJson(json) {

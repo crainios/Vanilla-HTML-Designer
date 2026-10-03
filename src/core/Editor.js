@@ -1,9 +1,9 @@
-import Shortcodes, { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from './Shortcodes.js?v=0.8.0';
+import Shortcodes, { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from './Shortcodes.js?v=0.8.24';
 import Grid from '../layout/Grid.js';
 import BlockFactory from '../blocks/BlockFactory.js';
 import Serializer from './Serializer.js';
 import History from './History.js';
-import TextToolbar from '../toolbar/TextToolbar.js?v=0.8.0';
+import TextToolbar from '../toolbar/TextToolbar.js?v=0.8.24';
 import HtmlImporter from './HtmlImporter.js';
 import { sanitizeHtml } from './HtmlSanitizer.js';
 
@@ -150,6 +150,10 @@ export default class Editor {
             defaultFontFamily: this.options.defaultFontFamily,
             customButtons: this.options.customButtons ?? [],
             disabledToolbarButtons: this.options.disabledToolbarButtons ?? [],
+            compositeStyles: this.options.compositeStyles,
+            onCompositeStylesChange: this.options.onCompositeStylesChange,
+            compositeStyleContext: style => this.#setCurrentCompositeStyle(style),
+            remember: () => this.#remember(),
             publicApi: () => this.options.publicApi ?? null,
             shortcodeMode: this.shortcodes.mode,
             canRenderShortcodes: typeof this.options.renderShortcode === 'function',
@@ -473,7 +477,20 @@ export default class Editor {
             paragraph.append(document.createElement('br'));
         }
 
-        pre.replaceWith(paragraph);
+        const wrapper = pre.parentElement?.classList.contains('vhd-code-wrapper')
+            ? pre.parentElement
+            : null;
+        const codeCaret = (wrapper || pre).nextElementSibling;
+
+        if (codeCaret?.matches('[data-vhd-code-caret]')) {
+            codeCaret.remove();
+        }
+
+        if (wrapper) {
+            wrapper.replaceWith(paragraph);
+        } else {
+            pre.replaceWith(paragraph);
+        }
 
         const range = document.createRange();
         range.selectNodeContents(paragraph);
@@ -548,22 +565,8 @@ export default class Editor {
 
         pre.append(code);
         range.insertNode(pre);
-
-        /*
-         * Keep a normal paragraph immediately after a code region. This makes
-         * it possible to continue writing without having to create another
-         * VHD content block.
-         */
-        let paragraph = pre.nextElementSibling;
-
-        if (
-            !(paragraph instanceof HTMLElement)
-            || paragraph.tagName !== 'P'
-        ) {
-            paragraph = document.createElement('p');
-            paragraph.append(document.createElement('br'));
-            pre.after(paragraph);
-        }
+        this.#promoteInsertedCodeBlock(pre, editable);
+        this.#ensureCodeCaret(pre);
 
         const caret = document.createRange();
 
@@ -586,6 +589,111 @@ export default class Editor {
 
         editable.focus();
         this.textToolbar.setActiveEditable(editable);
+
+        return true;
+    }
+
+    #promoteInsertedCodeBlock(pre, editable) {
+        if (
+            !(pre instanceof HTMLPreElement)
+            || !(editable instanceof HTMLElement)
+            || !editable.contains(pre)
+        ) {
+            return;
+        }
+
+        let container = pre;
+
+        while (
+            container.parentElement
+            && container.parentElement !== editable
+        ) {
+            container = container.parentElement;
+        }
+
+        if (
+            container === pre
+            || container.parentElement !== editable
+            || !['P', 'DIV'].includes(container.tagName)
+        ) {
+            return;
+        }
+
+        const fragmentBefore = document.createRange();
+        fragmentBefore.selectNodeContents(container);
+        fragmentBefore.setEndBefore(pre);
+
+        const fragmentAfter = document.createRange();
+        fragmentAfter.selectNodeContents(container);
+        fragmentAfter.setStartAfter(pre);
+
+        const before = container.cloneNode(false);
+        const after = container.cloneNode(false);
+        before.append(fragmentBefore.cloneContents());
+        after.append(fragmentAfter.cloneContents());
+
+        const hasContent = element => (
+            element.textContent.trim() !== ''
+            || Boolean(element.querySelector('img, video, iframe, table, hr'))
+        );
+
+        const replacements = [];
+
+        if (hasContent(before)) {
+            replacements.push(before);
+        }
+
+        replacements.push(pre);
+
+        if (hasContent(after)) {
+            replacements.push(after);
+        }
+
+        container.replaceWith(...replacements);
+    }
+
+    #ensureCodeCaret(pre) {
+        if (!(pre instanceof HTMLPreElement)) {
+            return null;
+        }
+
+        let next = pre.nextSibling;
+
+        while (
+            next?.nodeType === Node.TEXT_NODE
+            && next.textContent.trim() === ''
+        ) {
+            const emptyText = next;
+            next = next.nextSibling;
+            emptyText.remove();
+        }
+
+        if (next) {
+            return null;
+        }
+
+        const paragraph = document.createElement('p');
+        paragraph.className = 'vhd-code-caret';
+        paragraph.dataset.vhdCodeCaret = '';
+        paragraph.setAttribute('aria-label', 'Continue after code');
+        paragraph.append(document.createTextNode('\u200b'));
+        pre.after(paragraph);
+
+        return paragraph;
+    }
+
+    #activateCodeCaret(paragraph) {
+        if (
+            !(paragraph instanceof HTMLElement)
+            || !paragraph.matches('[data-vhd-code-caret]')
+        ) {
+            return false;
+        }
+
+        paragraph.removeAttribute('data-vhd-code-caret');
+        paragraph.removeAttribute('aria-label');
+        paragraph.classList.remove('vhd-code-caret');
+        paragraph.replaceChildren(document.createElement('br'));
 
         return true;
     }
@@ -614,6 +722,8 @@ export default class Editor {
             paragraph.append(document.createElement('br'));
             pre.after(paragraph);
         }
+
+        this.#activateCodeCaret(paragraph);
 
         const range = document.createRange();
         range.selectNodeContents(paragraph);
@@ -1310,6 +1420,87 @@ export default class Editor {
         return stats;
     }
 
+    #createCompositeStyleIndicator() {
+        const indicator = document.createElement('section');
+        indicator.className = 'vhd-composite-style-indicator';
+        indicator.dataset.vhdCompositeStyleIndicator = 'true';
+        indicator.hidden = !this.currentCompositeStyle;
+
+        const label = document.createElement('span');
+        label.className = 'vhd-composite-style-label';
+        label.textContent = this.t.compositeStyles.current;
+
+        const name = document.createElement('strong');
+        name.textContent = this.currentCompositeStyle?.name
+            || this.t.compositeStyles.missing;
+
+        const status = document.createElement('span');
+        status.className = `vhd-composite-style-status is-${this.currentCompositeStyle?.status || 'current'}`;
+        status.textContent = this.currentCompositeStyle?.status === 'outdated'
+            ? this.t.compositeStyles.updateAvailable
+            : this.currentCompositeStyle?.status === 'missing'
+                ? this.t.compositeStyles.missing
+                : this.t.compositeStyles.upToDate;
+
+        const actions = document.createElement('div');
+        actions.className = 'vhd-composite-style-actions';
+
+        const addAction = (text, callback) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'vhd-secondary-button';
+            button.textContent = text;
+            button.addEventListener('mousedown', event => event.preventDefault());
+            button.addEventListener('click', callback);
+            actions.append(button);
+        };
+
+        if (this.currentCompositeStyle?.status === 'outdated') {
+            addAction(
+                this.t.compositeStyles.updateOne,
+                () => this.textToolbar.reapplyCurrentCompositeStyle()
+            );
+            addAction(
+                this.t.compositeStyles.updateAll,
+                () => this.textToolbar.reapplyCurrentCompositeStyle(true)
+            );
+        } else if (this.currentCompositeStyle?.status === 'current') {
+            addAction(
+                this.t.compositeStyles.reapply,
+                () => this.textToolbar.reapplyCurrentCompositeStyle()
+            );
+        }
+
+        if (this.currentCompositeStyle) {
+            addAction(
+                this.t.compositeStyles.detach,
+                () => this.textToolbar.detachCurrentCompositeStyle()
+            );
+        }
+
+        indicator.append(label, name, status, actions);
+        return indicator;
+    }
+
+    #setCurrentCompositeStyle(style) {
+        this.currentCompositeStyle = style?.id
+            ? { ...style }
+            : null;
+
+        let indicator = this.propertiesPanel?.querySelector(
+            '[data-vhd-composite-style-indicator="true"]'
+        );
+
+        if (!indicator && this.propertiesPanel) {
+            indicator = this.#createCompositeStyleIndicator();
+            const status = this.propertiesPanel.querySelector('[data-vhd-status="true"]');
+            status?.after(indicator);
+        }
+
+        if (!indicator) return;
+        indicator.replaceWith(this.#createCompositeStyleIndicator());
+    }
+
     #updateDocumentStatistics() {
         const stats = this.#getDocumentStatistics();
 
@@ -1336,6 +1527,7 @@ export default class Editor {
         this.propertiesPanel.replaceChildren(
             this.#createDocumentStatistics(),
             this.#createStatusMessage(),
+            this.#createCompositeStyleIndicator(),
             title,
             empty
         );
@@ -1748,7 +1940,8 @@ export default class Editor {
         const panel = this.propertiesPanel;
         panel.replaceChildren(
             this.#createDocumentStatistics(),
-            this.#createStatusMessage()
+            this.#createStatusMessage(),
+            this.#createCompositeStyleIndicator()
         );
         this.#updateDocumentStatistics();
         this.#updateStatusMessage();
@@ -2340,7 +2533,8 @@ export default class Editor {
         const panel = this.propertiesPanel;
         panel.replaceChildren(
             this.#createDocumentStatistics(),
-            this.#createStatusMessage()
+            this.#createStatusMessage(),
+            this.#createCompositeStyleIndicator()
         );
         this.#updateDocumentStatistics();
         this.#updateStatusMessage();
@@ -2503,7 +2697,8 @@ export default class Editor {
         const panel = this.propertiesPanel;
         panel.replaceChildren(
             this.#createDocumentStatistics(),
-            this.#createStatusMessage()
+            this.#createStatusMessage(),
+            this.#createCompositeStyleIndicator()
         );
         this.#updateDocumentStatistics();
         this.#updateStatusMessage();
@@ -4694,6 +4889,7 @@ export default class Editor {
             }
 
             this.#remember();
+            this.textToolbar.formatSelectedShortcodes('bold');
             document.execCommand('bold', false, null);
             editable.dispatchEvent(new InputEvent('input', {
                 bubbles: true,
@@ -4872,6 +5068,20 @@ export default class Editor {
 
     #editable(element, block, property) {
         this.shortcodes.protect(element);
+        const lastContent = Array.from(element.childNodes)
+            .reverse()
+            .find(node =>
+                node.nodeType !== Node.TEXT_NODE
+                || node.textContent.trim() !== ''
+            );
+
+        if (
+            lastContent instanceof HTMLPreElement
+            && lastContent.classList.contains('vhd-code')
+        ) {
+            this.#ensureCodeCaret(lastContent);
+        }
+
         element.contentEditable = 'true';
         element.spellcheck = true;
         element.style.fontFamily = this.options.defaultFontFamily;
@@ -4978,6 +5188,13 @@ export default class Editor {
             const startElement = range.startContainer.nodeType === Node.ELEMENT_NODE
                 ? range.startContainer
                 : range.startContainer.parentElement;
+            const codeCaret = startElement?.closest?.('[data-vhd-code-caret]');
+
+            if (codeCaret && element.contains(codeCaret)) {
+                this.#activateCodeCaret(codeCaret);
+                return;
+            }
+
             const caret = startElement?.closest?.('[data-vhd-shortcode-caret]');
             if (!caret || !element.contains(caret)) return;
 
@@ -5010,6 +5227,61 @@ export default class Editor {
             const startElement = range.startContainer.nodeType === Node.ELEMENT_NODE
                 ? range.startContainer
                 : range.startContainer.parentElement;
+            const codeCaret = startElement?.closest?.('[data-vhd-code-caret]');
+
+            if (
+                range.collapsed
+                && ['Home', 'End'].includes(event.key)
+                && !event.shiftKey
+                && !event.ctrlKey
+                && !event.metaKey
+                && !event.altKey
+            ) {
+                let reference = startElement;
+
+                if (range.startContainer === element) {
+                    const children = element.childNodes;
+                    const node = children[
+                        Math.min(range.startOffset, children.length - 1)
+                    ] || children[range.startOffset - 1];
+                    reference = node?.nodeType === Node.ELEMENT_NODE
+                        ? node
+                        : node?.parentElement;
+                }
+
+                const line = reference?.closest?.(
+                    'p, li, h1, h2, h3, h4, h5, h6, blockquote, div'
+                ) || element;
+
+                if (
+                    (line === element || element.contains(line))
+                    && line.querySelector?.('[data-vhd-shortcode]')
+                ) {
+                    event.preventDefault();
+                    const boundary = document.createRange();
+                    boundary.selectNodeContents(line);
+                    boundary.collapse(event.key === 'Home');
+                    selection.removeAllRanges();
+                    selection.addRange(boundary);
+                    this.textToolbar.savedRange = boundary.cloneRange();
+                    return;
+                }
+            }
+
+            if (
+                codeCaret
+                && element.contains(codeCaret)
+                && event.key === 'Enter'
+            ) {
+                event.preventDefault();
+                this.#remember();
+                this.#activateCodeCaret(codeCaret);
+                element.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    inputType: 'insertParagraph'
+                }));
+                return;
+            }
 
             if (
                 range.collapsed
@@ -5258,6 +5530,97 @@ export default class Editor {
                 }
             }
 
+            if (
+                range.collapsed
+                && event.key === 'Enter'
+                && !event.shiftKey
+                && !event.ctrlKey
+                && !event.metaKey
+                && !event.altKey
+                && !startElement?.closest?.('pre.vhd-code, li')
+                && element.classList.contains('vhd-editable-text')
+                && !/^H[1-6]$/.test(element.tagName)
+            ) {
+                const tail = document.createRange();
+                tail.selectNodeContents(element);
+
+                try {
+                    tail.setStart(range.endContainer, range.endOffset);
+                } catch {
+                    tail.collapse(false);
+                }
+
+                const remainder = document.createElement('div');
+                remainder.append(tail.cloneContents());
+                const hasContentAfter = remainder.textContent
+                    .replace(/\u200b/g, '')
+                    .trim() !== '' || Boolean(remainder.querySelector(
+                    'img,video,iframe,table,hr,pre,[data-vhd-shortcode]'
+                ));
+
+                if (!hasContentAfter) {
+                    event.preventDefault();
+                    this.#remember();
+                    let topLevel = range.startContainer;
+
+                    while (
+                        topLevel !== element
+                        && topLevel.parentNode
+                        && topLevel.parentNode !== element
+                    ) {
+                        topLevel = topLevel.parentNode;
+                    }
+
+                    let paragraph = null;
+                    let sibling = topLevel !== element
+                        ? topLevel.nextSibling
+                        : null;
+
+                    while (sibling) {
+                        const next = sibling.nextSibling;
+                        const emptyParagraph = sibling instanceof HTMLParagraphElement
+                            && sibling.textContent.replace(/\u200b/g, '').trim() === ''
+                            && [...sibling.childNodes].every(node =>
+                                node.nodeType === Node.TEXT_NODE
+                                    ? node.textContent.replace(/\u200b/g, '').trim() === ''
+                                    : node.nodeName === 'BR'
+                            );
+
+                        if (emptyParagraph) {
+                            if (!paragraph) paragraph = sibling;
+                            else sibling.remove();
+                        }
+
+                        sibling = next;
+                    }
+
+                    if (paragraph) {
+                        paragraph.replaceChildren(document.createElement('br'));
+                    } else {
+                        paragraph = document.createElement('p');
+                        paragraph.append(document.createElement('br'));
+
+                        if (topLevel !== element && topLevel.parentNode === element) {
+                            topLevel.after(paragraph);
+                        } else {
+                            element.append(paragraph);
+                        }
+                    }
+
+                    const nextRange = document.createRange();
+                    nextRange.setStart(paragraph, 0);
+                    nextRange.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(nextRange);
+                    this.textToolbar.savedRange = nextRange.cloneRange();
+                    element.dispatchEvent(new InputEvent('input', {
+                        bubbles: true,
+                        inputType: 'insertParagraph'
+                    }));
+                    return;
+                }
+            }
+
             const pre = startElement?.closest?.('pre.vhd-code');
 
             if (!pre || !element.contains(pre)) {
@@ -5295,6 +5658,51 @@ export default class Editor {
         });
 
         element.addEventListener('pointerdown', event => {
+            let codeCaret = event.target.closest?.('[data-vhd-code-caret]');
+
+            if (!codeCaret) {
+                const terminalCaret = element.querySelector(
+                    ':scope > [data-vhd-code-caret]:last-child'
+                );
+                const codeBoundary = terminalCaret?.previousElementSibling;
+                const codeRect = codeBoundary?.getBoundingClientRect();
+                const editableRect = element.getBoundingClientRect();
+
+                if (
+                    terminalCaret
+                    && codeRect
+                    && event.button === 0
+                    && event.clientY >= codeRect.bottom
+                    && event.clientY <= editableRect.bottom
+                    && event.clientX >= editableRect.left
+                    && event.clientX <= editableRect.right
+                ) {
+                    codeCaret = terminalCaret;
+                }
+            }
+
+            if (codeCaret && element.contains(codeCaret)) {
+                event.preventDefault();
+                this.#remember();
+                this.#activateCodeCaret(codeCaret);
+                element.focus();
+
+                const range = document.createRange();
+                range.selectNodeContents(codeCaret);
+                range.collapse(true);
+
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                this.textToolbar.setActiveEditable(element);
+                this.textToolbar.savedRange = range.cloneRange();
+                element.dispatchEvent(new InputEvent('input', {
+                    bubbles: true,
+                    inputType: 'insertParagraph'
+                }));
+                return;
+            }
+
             const image = event.target.closest?.('img');
 
             if (

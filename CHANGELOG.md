@@ -1,3 +1,202 @@
+## [0.8.24] - 2026-10-03
+
+### Changed
+
+- Composite styles are no longer stored in `localStorage`, including as a fallback; the host application is now solely responsible for loading and persistence through `compositeStyles` and `onCompositeStylesChange`.
+- Asynchronous persistence failures are reported in the editor status area.
+
+### Added
+
+- BlogTheque now loads the authenticated user’s styles from the `styles` table for the current site and persists the complete library through a protected transactional AJAX endpoint.
+- Style persistence requests are serialized in the browser to prevent an older response from overwriting a more recent library state.
+
+## [0.8.23] - 2026-10-03
+
+### Changed
+
+- The Clear formatting toolbar action now uses a coloured eraser over an “A”, making it visually distinct from the Italic button.
+
+## [0.8.22] - 2026-10-03
+
+### Fixed
+
+- Clearing the formatting of a fully selected Citation no longer leaves empty `blockquote` clones before and after the resulting plain paragraph.
+- Empty structural fragments at selection boundaries are now removed consistently for quotations, lists, headings, code blocks and styled paragraphs.
+
+## [0.8.21] - 2026-10-03
+
+### Added
+
+- Composite styles now have revision numbers, and formatted elements retain the applied revision and style name alongside the style identifier.
+- The Properties sidebar reports whether the current style occurrence is up to date, has an update available, or refers to a missing style.
+- Outdated occurrences can be updated individually or all at once; current occurrences can be reapplied, and any occurrence can be detached without changing its appearance.
+- Updating a saved style now reports how many occurrences exist in the current document and asks whether all of them should be refreshed.
+
+### Changed
+
+- Loading a document never updates composite-style occurrences automatically; every refresh remains an explicit user action.
+
+## [0.8.20] - 2026-10-03
+
+### Added
+
+- Applying a composite style now records its identifier on the formatted element with `data-vhd-composite-style`.
+- The Properties sidebar now displays the name of the composite style associated with the element at the caret position.
+
+### Changed
+
+- The current-style indicator follows keyboard and pointer caret movements and remains visible when the Properties panel switches to Citation or drop-cap settings.
+
+## [0.8.19] - 2026-10-03
+
+### Fixed
+
+- Composite styles saved from a Citation now capture the enclosing `blockquote`, even when the caret is inside a nested paragraph.
+- Applying a Citation composite style now restores the semantic `blockquote`, its quotation-mark type, border and background, so the Citation toolbar state and properties are available again.
+- Applying another paragraph or heading composite style to a Citation replaces the obsolete `blockquote` structure instead of leaving Citation controls active.
+
+## [0.8.18] - 2026-10-03
+
+### Fixed
+
+- New semantic paragraphs created with Enter now keep a visible paragraph spacing inside Text blocks, even when the host page resets the browser's default `<p>` margins.
+- Shift+Enter remains an unspaced soft line break.
+
+## [0.8.17] - 2026-10-03
+
+### Fixed
+
+- Pressing Enter at the end of a Text block now reuses an existing trailing empty paragraph instead of inserting another paragraph before it.
+- Duplicate trailing empty paragraphs are consolidated, keeping the caret in the single semantic paragraph created or reused for the new line.
+
+## [0.8.16] - 2026-10-03
+
+### Fixed
+
+- Pressing Enter at the end of a Text block now creates a semantic empty paragraph (`<p><br></p>`) and places the caret inside it instead of leaving paragraph creation to the browser, which could insert only a `<br>`.
+- Shift+Enter remains a soft line break, while lists, headings and code regions retain their specialized Enter behaviour.
+
+## [0.8.15] - 2026-10-02
+
+### Added
+
+- The composite-style menu now provides explicit style-selection lists for updating and deleting saved styles.
+- Composite styles now capture and restore drop caps, including line count, colour, spacing, calculated glyph size, line height and vertical offset.
+
+### Changed
+
+- Updating a style no longer depends on saving another style with the same name: choose “Update a style…” and then select the style to replace with the current formatting.
+- Deleting a style now uses the saved-style list instead of asking the user to type its name.
+
+## [0.8.14] - 2026-10-02
+
+### Added
+
+- Added a reusable composite-style library at the beginning of the second toolbar row.
+- Users can capture the complete typography and paragraph presentation of the active paragraph, heading, quotation, code region or list item, give it a name and apply it later in one action.
+- Saved styles include font, size, weight, decoration, colours, line height, letter spacing, alignment, indentation, margins, padding, borders and radius.
+- Composite styles are stored in `localStorage` by default and can be initialized with `compositeStyles`, isolated with `compositeStyleStorageKey`, and synchronized by the host application through `onCompositeStylesChange`.
+- Styles can be updated by saving under the same name and removed from the Styles menu.
+
+### Changed
+
+- Applying a composite style removes conflicting descendant typography so the saved result applies consistently to the complete target element.
+- Composite-style application participates in Undo and Redo.
+
+## [0.8.13] - 2026-10-02
+
+### Changed
+
+- Replaced native range selection across multiple inline shortcodes with a stable atomic model: clicking an inline shortcode selects that shortcode alone for character formatting.
+- Restored protected shortcode cursor navigation and removed the mouse-drag and Shift+Arrow behaviour introduced for multi-shortcode selection.
+- Kept the corrected Home and End behaviour for paragraphs containing shortcodes.
+
+## [0.8.12] - 2026-10-02
+
+### Fixed
+
+- Home and End now move the caret to the real start or end of a paragraph containing protected shortcodes instead of stopping on technical zero-width positions around the tokens.
+- Modified shortcuts such as Ctrl/Cmd+Home, Ctrl/Cmd+End and Shift-based selection retain their native browser behaviour.
+
+## [0.8.11] - 2026-10-02
+
+### Fixed
+
+- The Bold action in the floating selection menu now applies to every inline shortcode included in the selection, using the same protected-shortcode formatting path as the main toolbar.
+
+## [0.8.10] - 2026-10-02
+
+### Fixed
+
+- Character formatting now explicitly includes every protected inline shortcode intersecting the native selection instead of relying on browser commands that ignore `contenteditable="false"` elements.
+- Bold, italic, underline, strike-through, superscript, subscript, font family, font size, text colour, background colour and letter spacing are preserved around formatted shortcode markup during serialization and reopening.
+
+## [0.8.9] - 2026-10-02
+
+### Changed
+
+- Inline shortcodes now participate in native text selection: a mouse drag can include one or several shortcodes together with surrounding text.
+- Shift+Left and Shift+Right are no longer intercepted at shortcode boundaries, allowing keyboard selection to extend naturally across multiple inline shortcodes.
+- A simple click still places the caret before or after the protected shortcode without making its technical source editable.
+
+## [0.8.8] - 2026-10-02
+
+### Fixed
+
+- When a code region is the final element, the entire empty editor area between the bottom of the code and the bottom edge of the text block now activates the continuation paragraph reliably.
+
+## [0.8.7] - 2026-10-02
+
+### Fixed
+
+- The continuation target after the last code region now contains a removable zero-width caret anchor, making it reliably selectable across browsers without creating a saved blank line.
+- Clicking in the area immediately below a terminal code region also activates the continuation paragraph when the browser reports the editable container rather than the caret target as the event target.
+
+## [0.8.6] - 2026-10-02
+
+### Fixed
+
+- The code-copy control is explicitly non-editable, preventing the caret from entering or modifying its icon and label.
+- If the copy control is accidentally removed from an active code region, it is restored automatically; if the code region itself is deleted, its orphaned interface wrapper is removed.
+
+## [0.8.5] - 2026-10-02
+
+### Fixed
+
+- The invisible continuation target below a terminal code region now has a reliable browser hit area without adding layout height.
+- Clicking immediately below the code activates a real paragraph and places the caret there, ready for typing; the action is included in undo history.
+
+## [0.8.4] - 2026-10-02
+
+### Fixed
+
+- Turning a code region back into text now removes its complete copy-button wrapper instead of leaving the copy control visible.
+- Code copy controls and their editor/runtime wrappers are always stripped from saved content while the semantic `pre.vhd-code` element is preserved.
+
+## [0.8.3] - 2026-10-02
+
+### Fixed
+
+- Converting a selection to a code region no longer leaves the original empty paragraph visible below the code.
+- The editor-only continuation target after a terminal code region no longer contains a line break or occupies a visual line; clicking its invisible hit area still allows writing after the code.
+
+## [0.8.2] - 2026-10-02
+
+### Fixed
+
+- The toolbar remains operational during a partial deployment when an older cached translation file does not yet contain the action or special-paste labels.
+- All updated module entry points use a new cache version so browsers cannot combine 0.7.x or 0.8.1 files with the current release.
+
+## [0.8.1] - 2026-10-02
+
+### Fixed
+
+- Inserting a code region at the end of text no longer saves or displays an unwanted empty paragraph after it.
+- A zero-height editor-only caret target remains available after a terminal code region, allowing users to click after the code or press Ctrl/Cmd+Enter and continue writing when needed.
+- The technical caret target is excluded from JSON content, HTML export, clipboard text and published output.
+- The toolbar no longer crashes when an older cached translation file without action labels is temporarily mixed with the current scripts during deployment.
+- The built-in English translations now use the same cache version as the editor entry point.
+
 ## [0.8.0] - 2026-10-01
 
 ### Release highlights

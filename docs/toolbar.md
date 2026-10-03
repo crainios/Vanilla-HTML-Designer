@@ -27,6 +27,7 @@ formatted structure with plain text while preserving the surrounding document.
 
 The second row contains paragraph and document commands:
 
+- Reusable composite styles
 - Paragraph or Heading 1–6
 - Line height
 - Lists
@@ -45,6 +46,18 @@ so nested lists retain semantic HTML.
 
 The Drop cap button toggles the current paragraph and reflects its active state. Drop-cap
 size, colour, spacing and line count are edited in Properties.
+
+## Composite styles
+
+The Styles menu captures the complete presentation of the active paragraph, heading,
+quotation, code region or list item. A saved style combines typography and paragraph
+properties and can be applied later in one action. Drop-cap settings are included.
+“Update a style…” and “Delete a style…” display the saved-style list so the target can
+be chosen directly.
+
+VHD does not store styles locally. Host applications provide the initial
+`compositeStyles` array and persist changes through `onCompositeStylesChange`. This keeps
+user, site and permission isolation under the control of the server application.
 
 ## Lists
 
@@ -103,6 +116,7 @@ video
 code
 emoji
 specialCharacters
+compositeStyles
 paragraph
 lineHeight
 lists

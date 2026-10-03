@@ -14,16 +14,58 @@ function shortcodeMarkup(tagName, source) {
 }
 
 export function serializeShortcodes(container) {
-    if (!container.querySelector('[data-vhd-shortcode], [data-vhd-shortcode-caret]')) return container.innerHTML;
+    if (!container.querySelector('[data-vhd-shortcode], [data-vhd-shortcode-caret], [data-vhd-code-caret], .vhd-code-wrapper, .vhd-code-copy, [data-vhd-code-ready]')) return container.innerHTML;
     const clone = container.cloneNode(true);
-    clone.querySelectorAll('[data-vhd-shortcode-caret]').forEach(element => element.remove());
+    clone.querySelectorAll('[data-vhd-shortcode-caret], [data-vhd-code-caret]').forEach(element => element.remove());
+    clone.querySelectorAll('.vhd-code-copy').forEach(element => element.remove());
+    clone.querySelectorAll('[data-vhd-code-ready]').forEach(element => {
+        element.removeAttribute('data-vhd-code-ready');
+    });
+    clone.querySelectorAll('.vhd-code-wrapper').forEach(wrapper => {
+        const pre = Array.from(wrapper.children).find(element =>
+            element.matches('pre.vhd-code')
+        );
+
+        if (pre) {
+            wrapper.replaceWith(pre);
+        } else {
+            wrapper.remove();
+        }
+    });
     clone.querySelectorAll('[data-vhd-shortcode]').forEach(element => {
         const tagName = validTagName(element.dataset.vhdShortcodeTag)
             || validTagName(element.localName)
             || 'shortcode';
         const token = document.createElement(tagName);
         token.textContent = element.dataset.vhdShortcode;
-        element.replaceWith(token);
+        const formatting = document.createElement('span');
+        const properties = [
+            'fontFamily',
+            'fontSize',
+            'fontWeight',
+            'fontStyle',
+            'textDecorationLine',
+            'color',
+            'backgroundColor',
+            'letterSpacing'
+        ];
+
+        properties.forEach(property => {
+            if (element.style[property]) {
+                formatting.style[property] = element.style[property];
+            }
+        });
+
+        if (['super', 'sub', 'baseline'].includes(element.style.verticalAlign)) {
+            formatting.style.verticalAlign = element.style.verticalAlign;
+        }
+
+        if (formatting.getAttribute('style')) {
+            formatting.append(token);
+            element.replaceWith(formatting);
+        } else {
+            element.replaceWith(token);
+        }
     });
     const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
     const textNodes = [];
@@ -66,7 +108,7 @@ export function shortcodePlainText(container) {
         if (node.nodeType === Node.TEXT_NODE) {
             text += node.textContent.replace(/\u200b/g, '');
         } else if (node.nodeType === Node.ELEMENT_NODE) {
-            if (node.matches('[data-vhd-shortcode-caret]')) return;
+            if (node.matches('[data-vhd-shortcode-caret], [data-vhd-code-caret]')) return;
             if (node.matches('[data-vhd-shortcode]') && tokenPattern.test(node.dataset.vhdShortcode)) {
                 const tagName = validTagName(node.dataset.vhdShortcodeTag)
                     || validTagName(node.localName)
@@ -191,12 +233,17 @@ export default class Shortcodes {
                 event.preventDefault();
                 editable.focus({ preventScroll: true });
                 const range = document.createRange();
-                const after = event.clientX >= element.getBoundingClientRect().left
-                    + element.getBoundingClientRect().width / 2;
-                if (after) range.setStartAfter(element);
-                else range.setStartBefore(element);
-                range.collapse(true);
+                if (block) {
+                    const after = event.clientX >= element.getBoundingClientRect().left
+                        + element.getBoundingClientRect().width / 2;
+                    if (after) range.setStartAfter(element);
+                    else range.setStartBefore(element);
+                    range.collapse(true);
+                } else {
+                    range.selectNode(element);
+                }
                 const selection = window.getSelection();
+                if (!selection) return;
                 selection.removeAllRanges();
                 selection.addRange(range);
                 editable.dispatchEvent(new CustomEvent('vhd:shortcode-caret', {

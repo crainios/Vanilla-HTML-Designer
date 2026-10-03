@@ -1,4 +1,4 @@
-import { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from '../core/Shortcodes.js?v=0.8.0';
+import { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from '../core/Shortcodes.js?v=0.8.24';
 import { VERSION } from '../version.js';
 import emojiCategories from './EmojiData.js';
 import specialCharacterCategories from './SpecialCharacterData.js';
@@ -135,8 +135,13 @@ function historyIcon(direction) {
 function clearFormattingIcon() {
     return `
         <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
-            <path d="M5.1 2h8.2v1.7H10l-2.7 8h2.9v1.7H2.7v-1.7h2.8l2.7-8H5.1z"></path>
-            <path d="M11.5 11.2l4.8 4.8-1.2 1.2-4.8-4.8z"></path>
+            <path fill="#64748b" d="M1.2 14.8 4.8 3.2h2.1l3.5 11.6H8.5l-.9-3H4l-.9 3H1.2zm3.3-4.7h2.6L5.8 5.7l-1.3 4.4z"></path>
+            <g transform="rotate(-38 12 10)">
+                <rect x="7.2" y="6.5" width="9.2" height="5.6" rx="1.2" fill="#2563eb"></rect>
+                <path fill="#fda4af" d="M7.2 7.7c0-.7.5-1.2 1.2-1.2h2.1v5.6H8.4c-.7 0-1.2-.5-1.2-1.2V7.7z"></path>
+                <path fill="#fff" opacity=".75" d="M10.5 6.5h1v5.6h-1z"></path>
+            </g>
+            <path d="M8.5 15.5h7.7" fill="none" stroke="#94a3b8" stroke-width="1.2" stroke-linecap="round"></path>
         </svg>
     `;
 }
@@ -285,12 +290,69 @@ function pasteIcon() {
     `;
 }
 
+const fallbackActionTranslations = {
+    undo: 'Undo',
+    redo: 'Redo',
+    clearFormatting: 'Clear formatting'
+};
+
+const fallbackPasteSpecialTranslations = {
+    title: 'Paste special',
+    markdown: 'Markdown',
+    html: 'Sanitized HTML',
+    plainText: 'Plain text',
+    adapt: 'Match document',
+    success: 'Clipboard content was inserted.',
+    empty: 'The clipboard contains no compatible content.',
+    placeCursor: 'Place the caret in the document first.',
+    ready: 'Paste mode selected: now press Ctrl+V at the caret position.'
+};
+
+const fallbackCompositeStyleTranslations = {
+    title: 'Styles',
+    save: 'Save current style…',
+    update: 'Update a style…',
+    delete: 'Delete a style…',
+    back: 'Back',
+    empty: 'No saved style',
+    namePrompt: 'Style name',
+    deletePrompt: 'Name of the style to delete',
+    saved: 'Style saved.',
+    deleted: 'Style deleted.',
+    current: 'Composite style',
+    upToDate: 'Up to date',
+    updateAvailable: 'Update available',
+    missing: 'Style not found',
+    reapply: 'Reapply style',
+    updateOne: 'Update this occurrence',
+    updateAll: 'Update all occurrences',
+    detach: 'Detach from style',
+    updateAllPrompt: 'The “%s” style is used %d times in this document. Update all occurrences?',
+    persistenceError: 'Unable to save styles on the server.',
+    unavailable: 'Place the caret in a paragraph or heading first.'
+};
+
 export default class TextToolbar {
     constructor(translations, actions = {}) {
-        this.t = translations;
+        this.t = {
+            ...translations,
+            actions: {
+                ...fallbackActionTranslations,
+                ...(translations?.actions ?? {})
+            },
+            pasteSpecial: {
+                ...fallbackPasteSpecialTranslations,
+                ...(translations?.pasteSpecial ?? {})
+            },
+            compositeStyles: {
+                ...fallbackCompositeStyleTranslations,
+                ...(translations?.compositeStyles ?? {})
+            }
+        };
         this.actions = actions;
         this.defaultFontFamily = actions.defaultFontFamily || 'system-ui';
         this.customButtons = Array.isArray(actions.customButtons) ? actions.customButtons : [];
+        this.compositeStyles = this.#loadCompositeStyles(actions.compositeStyles);
         this.disabledToolbarButtons = new Set(
             Array.isArray(actions.disabledToolbarButtons)
                 ? actions.disabledToolbarButtons.map(value => String(value))
@@ -415,6 +477,109 @@ export default class TextToolbar {
         return this.actions.formatSelection(command, value) === true;
     }
 
+    #selectedInlineShortcodes(range = null) {
+        if (!(this.activeEditable instanceof HTMLElement)) {
+            return [];
+        }
+
+        const selection = window.getSelection();
+        const activeRange = range
+            ?? (selection?.rangeCount ? selection.getRangeAt(0) : null);
+
+        if (!(activeRange instanceof Range) || activeRange.collapsed) {
+            return [];
+        }
+
+        const shortcode = [...this.activeEditable.querySelectorAll('[data-vhd-shortcode]')]
+            .find(shortcode =>
+                shortcode.style.display !== 'block'
+                && (() => {
+                    try {
+                        return activeRange.intersectsNode(shortcode);
+                    } catch {
+                        return false;
+                    }
+                })()
+            );
+
+        return shortcode ? [shortcode] : [];
+    }
+
+    #formatInlineShortcodes(shortcodes, command, value = null) {
+        if (!shortcodes.length) {
+            return false;
+        }
+
+        const computed = shortcode => window.getComputedStyle(shortcode);
+        const every = predicate => shortcodes.every(shortcode =>
+            predicate(computed(shortcode))
+        );
+
+        if (command === 'bold') {
+            const remove = every(style => Number.parseInt(style.fontWeight, 10) >= 600);
+            shortcodes.forEach(shortcode => {
+                shortcode.style.fontWeight = remove ? 'normal' : 'bold';
+            });
+        } else if (command === 'italic') {
+            const remove = every(style => style.fontStyle === 'italic');
+            shortcodes.forEach(shortcode => {
+                shortcode.style.fontStyle = remove ? 'normal' : 'italic';
+            });
+        } else if (command === 'underline' || command === 'strikeThrough') {
+            const decoration = command === 'underline' ? 'underline' : 'line-through';
+            const remove = every(style =>
+                style.textDecorationLine.split(/\s+/).includes(decoration)
+            );
+            shortcodes.forEach(shortcode => {
+                shortcode.style.textDecorationLine = remove ? 'none' : decoration;
+            });
+        } else if (command === 'superscript' || command === 'subscript') {
+            const position = command === 'superscript' ? 'super' : 'sub';
+            const remove = every(style => style.verticalAlign === position);
+            shortcodes.forEach(shortcode => {
+                shortcode.style.verticalAlign = remove ? 'baseline' : position;
+                shortcode.style.fontSize = remove ? '' : '.75em';
+            });
+        } else if (command === 'fontName') {
+            shortcodes.forEach(shortcode => {
+                shortcode.style.fontFamily = String(value ?? '');
+            });
+        } else if (command === 'fontSizePt') {
+            shortcodes.forEach(shortcode => {
+                shortcode.style.fontSize = `${Number(value)}pt`;
+            });
+        } else if (command === 'foreColor') {
+            shortcodes.forEach(shortcode => {
+                shortcode.style.color = String(value ?? '');
+            });
+        } else if (command === 'hiliteColor') {
+            shortcodes.forEach(shortcode => {
+                shortcode.style.backgroundColor = String(value ?? '');
+            });
+        } else if (command === 'letterSpacing') {
+            shortcodes.forEach(shortcode => {
+                shortcode.style.letterSpacing = `${Number(value)}px`;
+            });
+        } else {
+            return false;
+        }
+
+        return true;
+    }
+
+    #notifyShortcodeFormatting(command, value = null) {
+        this.activeEditable?.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: `format${command}`,
+            data: value == null ? null : String(value)
+        }));
+    }
+
+    formatSelectedShortcodes(command, value = null, range = null) {
+        const shortcodes = this.#selectedInlineShortcodes(range);
+        return this.#formatInlineShortcodes(shortcodes, command, value);
+    }
+
     #button(label, command, value = null, html = null) {
         const button = document.createElement('button');
         button.type = 'button';
@@ -462,7 +627,11 @@ export default class TextToolbar {
             }
 
             this.#restoreSelection();
+            const shortcodes = this.#selectedInlineShortcodes();
             document.execCommand(command, false, value);
+            if (this.#formatInlineShortcodes(shortcodes, command, value)) {
+                this.#notifyShortcodeFormatting(command, value);
+            }
             this.#keepSelection();
         });
 
@@ -606,6 +775,7 @@ export default class TextToolbar {
 
         const bookmark = this.#getTextSelectionBookmark();
         const segments = this.#selectionTextNodeSegments(range);
+        const shortcodes = this.#selectedInlineShortcodes(range);
 
         /*
          * Process from the end of the DOM selection backwards. Splitting a
@@ -621,6 +791,8 @@ export default class TextToolbar {
                 `${spacing}px`
             );
         });
+
+        this.#formatInlineShortcodes(shortcodes, 'letterSpacing', spacing);
 
         this.activeEditable.normalize();
 
@@ -1088,6 +1260,504 @@ export default class TextToolbar {
 
         this.pasteSpecialTrigger = dropdown.querySelector('.vhd-toolbar-dropdown-trigger');
         return dropdown;
+    }
+
+    #loadCompositeStyles(initialStyles) {
+        const normalize = styles => styles.map(style => ({
+            ...style,
+            revision: Math.max(1, Number.parseInt(style.revision, 10) || 1)
+        }));
+
+        if (Array.isArray(initialStyles)) {
+            return normalize(structuredClone(initialStyles));
+        }
+
+        return [];
+    }
+
+    #persistCompositeStyles() {
+        try {
+            const result = this.actions.onCompositeStylesChange?.(
+                structuredClone(this.compositeStyles)
+            );
+
+            if (result && typeof result.catch === 'function') {
+                result.catch(() => this.actions.status?.(
+                    this.t.compositeStyles.persistenceError,
+                    'error'
+                ));
+            }
+        } catch {
+            this.actions.status?.(
+                this.t.compositeStyles.persistenceError,
+                'error'
+            );
+        }
+    }
+
+    #compositeStyleTarget(range = null) {
+        if (!(this.activeEditable instanceof HTMLElement)) {
+            return null;
+        }
+
+        const selection = window.getSelection();
+        const activeRange = range
+            ?? (selection?.rangeCount ? selection.getRangeAt(0) : null);
+        let node = activeRange?.startContainer ?? this.activeEditable;
+
+        if (node === this.activeEditable && activeRange) {
+            node = this.activeEditable.childNodes[
+                Math.min(activeRange.startOffset, this.activeEditable.childNodes.length - 1)
+            ] || this.activeEditable;
+        }
+
+        const element = node?.nodeType === Node.ELEMENT_NODE
+            ? node
+            : node?.parentElement;
+        const selector = 'p,h1,h2,h3,h4,h5,h6,blockquote,pre,li';
+        const quote = element?.closest?.('blockquote');
+
+        /*
+         * A citation may contain paragraphs. In that case the composite style
+         * must describe the enclosing quote, not only its inner paragraph.
+         */
+        if (quote && this.activeEditable.contains(quote)) {
+            return quote;
+        }
+
+        const target = element?.closest?.(selector);
+
+        if (target && this.activeEditable.contains(target)) {
+            return target;
+        }
+
+        return this.activeEditable.matches(selector)
+            ? this.activeEditable
+            : this.activeEditable;
+    }
+
+    #compositeStyleTargets() {
+        const selection = window.getSelection();
+
+        if (!selection?.rangeCount || !(this.activeEditable instanceof HTMLElement)) {
+            return [];
+        }
+
+        const range = selection.getRangeAt(0);
+        const selector = 'p,h1,h2,h3,h4,h5,h6,blockquote,pre,li';
+        const targets = [...this.activeEditable.querySelectorAll(selector)]
+            .filter(element => {
+                try {
+                    return range.intersectsNode(element);
+                } catch {
+                    return false;
+                }
+            });
+
+        if (this.activeEditable.matches(selector)) {
+            targets.unshift(this.activeEditable);
+        }
+
+        if (!targets.length) {
+            const target = this.#compositeStyleTarget(range);
+            if (target) targets.push(target);
+        }
+
+        return [...new Set(targets)];
+    }
+
+    #captureCompositeStyle(name) {
+        const target = this.#compositeStyleTarget();
+
+        if (!(target instanceof HTMLElement)) {
+            return null;
+        }
+
+        const selection = window.getSelection();
+        const anchor = selection?.rangeCount
+            ? selection.getRangeAt(0).startContainer
+            : target;
+        const anchorElement = anchor?.nodeType === Node.ELEMENT_NODE
+            ? anchor
+            : anchor?.parentElement;
+        const inlineSource = anchorElement && target.contains(anchorElement)
+            ? anchorElement
+            : target;
+        const computed = window.getComputedStyle(target);
+        const inlineComputed = window.getComputedStyle(inlineSource);
+        const typography = [
+            'fontFamily', 'fontSize', 'fontWeight', 'fontStyle',
+            'textDecorationLine', 'color', 'backgroundColor',
+            'letterSpacing'
+        ];
+        const paragraph = [
+            'lineHeight', 'textAlign', 'textIndent',
+            'marginTop', 'marginBottom', 'paddingTop', 'paddingRight',
+            'paddingBottom', 'paddingLeft', 'borderTop', 'borderRight',
+            'borderBottom', 'borderLeft', 'borderRadius'
+        ];
+        const style = {};
+
+        typography.forEach(property => {
+            style[property] = inlineComputed[property];
+        });
+        paragraph.forEach(property => {
+            style[property] = computed[property];
+        });
+
+        return {
+            id: globalThis.crypto?.randomUUID?.()
+                || `style-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            name,
+            element: target.tagName.toLowerCase(),
+            style,
+            dropCap: target.matches('p.vhd-drop-cap')
+                ? {
+                    lines: target.dataset.vhdDropCapLines || '3',
+                    color: target.dataset.vhdDropCapColor || '#1f2937',
+                    spacing: target.dataset.vhdDropCapSpacing || '6',
+                    size: target.style.getPropertyValue('--vhd-drop-cap-size'),
+                    lineHeight: target.style.getPropertyValue('--vhd-drop-cap-line-height'),
+                    offset: target.style.getPropertyValue('--vhd-drop-cap-offset')
+                }
+                : null,
+            quote: target.matches('blockquote')
+                ? {
+                    marks: target.dataset.vhdQuoteMarks || 'ornamental'
+                }
+                : null
+        };
+    }
+
+    #replaceCompositeStyleElement(target, elementName) {
+        const convertible = new Set([
+            'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote'
+        ]);
+        const currentName = target?.tagName?.toLowerCase();
+
+        if (
+            !(target instanceof HTMLElement)
+            || !convertible.has(currentName)
+            || !convertible.has(elementName)
+            || currentName === elementName
+        ) {
+            return target;
+        }
+
+        const replacement = document.createElement(elementName);
+
+        [...target.attributes].forEach(attribute => {
+            replacement.setAttribute(attribute.name, attribute.value);
+        });
+
+        while (target.firstChild) {
+            replacement.append(target.firstChild);
+        }
+
+        target.replaceWith(replacement);
+        return replacement;
+    }
+
+    #saveCurrentCompositeStyle() {
+        if (!this.#restoreSelection()) {
+            this.actions.status?.(this.t.compositeStyles.unavailable, 'info');
+            return;
+        }
+
+        const name = window.prompt(this.t.compositeStyles.namePrompt)?.trim();
+        if (!name) return;
+        const style = this.#captureCompositeStyle(name);
+
+        if (!style) {
+            this.actions.status?.(this.t.compositeStyles.unavailable, 'info');
+            return;
+        }
+
+        const existing = this.compositeStyles.findIndex(item =>
+            item.name.localeCompare(name, undefined, { sensitivity: 'accent' }) === 0
+        );
+
+        if (existing >= 0) {
+            style.id = this.compositeStyles[existing].id;
+            style.revision = this.compositeStyles[existing].revision + 1;
+            this.compositeStyles.splice(existing, 1, style);
+            this.#offerCompositeStyleUpdate(style);
+        } else {
+            style.revision = 1;
+            this.compositeStyles.push(style);
+        }
+
+        this.#persistCompositeStyles();
+        this.actions.status?.(this.t.compositeStyles.saved, 'success');
+    }
+
+    #updateCompositeStyle(existingStyle) {
+        if (!existingStyle || !this.#restoreSelection()) return;
+        const updated = this.#captureCompositeStyle(existingStyle.name);
+        if (!updated) return;
+        updated.id = existingStyle.id;
+        updated.revision = existingStyle.revision + 1;
+        const index = this.compositeStyles.findIndex(style =>
+            style.id === existingStyle.id
+        );
+        if (index < 0) return;
+        this.compositeStyles.splice(index, 1, updated);
+        this.#persistCompositeStyles();
+        this.#offerCompositeStyleUpdate(updated);
+        this.actions.status?.(this.t.compositeStyles.saved, 'success');
+    }
+
+    #applyCompositeStyleToTarget(style, initialTarget) {
+        const target = this.#replaceCompositeStyleElement(
+            initialTarget,
+            style.element
+        );
+        const typography = [
+            'fontFamily', 'fontSize', 'fontWeight', 'fontStyle',
+            'textDecorationLine', 'color', 'backgroundColor',
+            'lineHeight', 'letterSpacing'
+        ];
+
+        Object.entries(style.style ?? {}).forEach(([property, value]) => {
+            target.style[property] = value;
+        });
+
+        if (style.quote && target.tagName === 'BLOCKQUOTE') {
+            target.dataset.vhdQuoteMarks = style.quote.marks || 'ornamental';
+        } else {
+            delete target.dataset.vhdQuoteMarks;
+        }
+
+        target.dataset.vhdCompositeStyle = style.id;
+        target.dataset.vhdCompositeStyleName = style.name;
+        target.dataset.vhdCompositeStyleRevision = String(style.revision || 1);
+
+        target.querySelectorAll('span,font').forEach(element => {
+            typography.forEach(property => element.style.removeProperty(
+                property.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)
+            ));
+            if (!element.getAttribute('style')) element.removeAttribute('style');
+        });
+
+        const variables = [
+            '--vhd-drop-cap-size',
+            '--vhd-drop-cap-line-height',
+            '--vhd-drop-cap-offset',
+            '--vhd-drop-cap-color',
+            '--vhd-drop-cap-spacing'
+        ];
+
+        if (style.dropCap && target.tagName === 'P') {
+            target.classList.add('vhd-drop-cap');
+            target.dataset.vhdDropCapLines = style.dropCap.lines;
+            target.dataset.vhdDropCapColor = style.dropCap.color;
+            target.dataset.vhdDropCapSpacing = style.dropCap.spacing;
+            target.style.setProperty('--vhd-drop-cap-size', style.dropCap.size);
+            target.style.setProperty('--vhd-drop-cap-line-height', style.dropCap.lineHeight);
+            target.style.setProperty('--vhd-drop-cap-offset', style.dropCap.offset);
+            target.style.setProperty('--vhd-drop-cap-color', style.dropCap.color);
+            target.style.setProperty('--vhd-drop-cap-spacing', `${style.dropCap.spacing}px`);
+        } else {
+            target.classList.remove('vhd-drop-cap');
+            delete target.dataset.vhdDropCapLines;
+            delete target.dataset.vhdDropCapColor;
+            delete target.dataset.vhdDropCapSpacing;
+            variables.forEach(variable => target.style.removeProperty(variable));
+        }
+
+        return target;
+    }
+
+    #compositeStyleOccurrences(styleId) {
+        const root = this.element.closest('.vhd') || document;
+        return [...root.querySelectorAll('[data-vhd-composite-style]')]
+            .filter(element => element.dataset.vhdCompositeStyle === styleId);
+    }
+
+    #dispatchCompositeStyleInputs(elements, styleId) {
+        const editables = new Set();
+
+        elements.forEach(element => {
+            const editable = element.matches?.('[contenteditable="true"]')
+                ? element
+                : element.closest?.('[contenteditable="true"]');
+            if (editable) editables.add(editable);
+        });
+
+        editables.forEach(editable => editable.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: 'formatCompositeStyle',
+            data: styleId
+        })));
+    }
+
+    #updateCompositeStyleOccurrences(style, elements) {
+        const updated = elements.map(element =>
+            this.#applyCompositeStyleToTarget(style, element)
+        );
+        this.#dispatchCompositeStyleInputs(updated, style.id);
+        this.updateActiveStates();
+    }
+
+    #offerCompositeStyleUpdate(style) {
+        const occurrences = this.#compositeStyleOccurrences(style.id);
+        if (!occurrences.length) return;
+        const message = this.t.compositeStyles.updateAllPrompt
+            .replace('%s', style.name)
+            .replace('%d', String(occurrences.length));
+
+        if (window.confirm(message)) {
+            this.actions.remember?.();
+            this.#updateCompositeStyleOccurrences(style, occurrences);
+        }
+    }
+
+    #applyCompositeStyle(style) {
+        if (!style || !this.#restoreSelection()) return;
+        const targets = this.#compositeStyleTargets();
+        const bookmark = this.#getTextSelectionBookmark();
+
+        if (!targets.length) {
+            this.actions.status?.(this.t.compositeStyles.unavailable, 'info');
+            return;
+        }
+
+        this.actions.remember?.();
+        targets.forEach(target => this.#applyCompositeStyleToTarget(style, target));
+
+        this.activeEditable.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: 'formatCompositeStyle',
+            data: style.id
+        }));
+        this.#restoreTextSelectionBookmark(bookmark);
+        this.#keepSelection(false);
+    }
+
+    reapplyCurrentCompositeStyle(updateAll = false) {
+        const selection = window.getSelection();
+        let node = selection?.anchorNode;
+        if (node?.nodeType === Node.TEXT_NODE) node = node.parentElement;
+        const element = node?.closest?.('[data-vhd-composite-style]');
+        const style = element
+            ? this.compositeStyles.find(item =>
+                item.id === element.dataset.vhdCompositeStyle
+            )
+            : null;
+        if (!element || !style) return;
+
+        const bookmark = this.#getTextSelectionBookmark();
+        this.actions.remember?.();
+
+        if (updateAll) {
+            this.#updateCompositeStyleOccurrences(
+                style,
+                this.#compositeStyleOccurrences(style.id)
+            );
+        } else {
+            const updated = this.#applyCompositeStyleToTarget(style, element);
+            this.#dispatchCompositeStyleInputs([updated], style.id);
+        }
+
+        this.#restoreTextSelectionBookmark(bookmark);
+        this.updateActiveStates();
+    }
+
+    detachCurrentCompositeStyle() {
+        const selection = window.getSelection();
+        let node = selection?.anchorNode;
+        if (node?.nodeType === Node.TEXT_NODE) node = node.parentElement;
+        const element = node?.closest?.('[data-vhd-composite-style]');
+        if (!element) return;
+        this.actions.remember?.();
+        delete element.dataset.vhdCompositeStyle;
+        delete element.dataset.vhdCompositeStyleName;
+        delete element.dataset.vhdCompositeStyleRevision;
+        this.#dispatchCompositeStyleInputs([element], null);
+        this.updateActiveStates();
+    }
+
+    #deleteCompositeStyle(style) {
+        if (!style) return;
+        const index = this.compositeStyles.findIndex(item => item.id === style.id);
+        if (index < 0) return;
+        this.compositeStyles.splice(index, 1);
+        this.#persistCompositeStyles();
+        this.updateActiveStates();
+        this.actions.status?.(this.t.compositeStyles.deleted, 'success');
+    }
+
+    #compositeStylesDropdown() {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'vhd-toolbar-dropdown';
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'vhd-toolbar-button vhd-toolbar-dropdown-trigger';
+        trigger.title = this.t.compositeStyles.title;
+        trigger.setAttribute('aria-label', this.t.compositeStyles.title);
+        trigger.setAttribute('aria-haspopup', 'true');
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.innerHTML = `<strong>S</strong><span class="vhd-toolbar-caret">▾</span>`;
+        const menu = document.createElement('div');
+        menu.className = 'vhd-toolbar-menu';
+        menu.hidden = true;
+
+        const rebuild = (mode = 'main') => {
+            menu.replaceChildren();
+            const add = (label, action, disabled = false, close = true) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'vhd-toolbar-menu-item';
+                button.textContent = label;
+                button.disabled = disabled;
+                button.addEventListener('mousedown', event => {
+                    event.preventDefault();
+                    action?.();
+                    if (close) this.#closeMenus();
+                });
+                menu.append(button);
+            };
+
+            const styles = this.compositeStyles
+                .slice()
+                .sort((a, b) => a.name.localeCompare(b.name));
+
+            if (mode === 'update' || mode === 'delete') {
+                styles.forEach(style => add(
+                    style.name,
+                    () => mode === 'update'
+                        ? this.#updateCompositeStyle(style)
+                        : this.#deleteCompositeStyle(style)
+                ));
+                add(this.t.compositeStyles.back, () => rebuild('main'), false, false);
+                return;
+            }
+
+            styles.forEach(style => add(style.name, () => this.#applyCompositeStyle(style)));
+
+            if (!this.compositeStyles.length) {
+                add(this.t.compositeStyles.empty, null, true);
+            }
+
+            add(this.t.compositeStyles.save, () => this.#saveCurrentCompositeStyle());
+            add(this.t.compositeStyles.update, () => rebuild('update'), !styles.length, false);
+            add(this.t.compositeStyles.delete, () => rebuild('delete'), !styles.length, false);
+        };
+
+        trigger.addEventListener('mousedown', event => {
+            this.#saveSelection();
+            event.preventDefault();
+            const willOpen = menu.hidden;
+            this.#closeMenus();
+            if (willOpen) {
+                rebuild();
+                menu.hidden = false;
+                trigger.setAttribute('aria-expanded', 'true');
+            }
+        });
+
+        wrapper.append(trigger, menu);
+        return wrapper;
     }
 
     handleSpecialPaste(event, element) {
@@ -1570,46 +2240,26 @@ export default class TextToolbar {
 
             const before = beforeRange.cloneContents();
             const after = afterRange.cloneContents();
-            const removeEmptyListBoundary = (content, edge) => {
-                let node = edge === 'start'
-                    ? content.firstChild
-                    : content.lastChild;
-
-                while (node?.childNodes?.length) {
-                    node = edge === 'start'
-                        ? node.firstChild
-                        : node.lastChild;
-                }
-
-                const element = node?.nodeType === Node.ELEMENT_NODE
-                    ? node
-                    : node?.parentElement;
-                const item = element?.closest?.('li');
-
-                if (
-                    !(item instanceof HTMLLIElement)
-                    || item.textContent.trim()
-                    || item.querySelector('img,video,iframe,table,hr')
-                ) {
-                    return;
-                }
-
-                let parent = item.parentElement;
-                item.remove();
+            const removeEmptyStructuralBoundary = (content, edge) => {
+                const boundaryElement = () => edge === 'start'
+                    ? content.firstElementChild
+                    : content.lastElementChild;
+                let element = boundaryElement();
 
                 while (
-                    parent
-                    && ['OL', 'UL'].includes(parent.tagName)
-                    && !parent.querySelector('li')
+                    element
+                    && !element.textContent.trim()
+                    && !element.querySelector(
+                        'img,video,iframe,table,hr,shortcode'
+                    )
                 ) {
-                    const nextParent = parent.parentElement;
-                    parent.remove();
-                    parent = nextParent;
+                    element.remove();
+                    element = boundaryElement();
                 }
             };
 
-            removeEmptyListBoundary(before, 'end');
-            removeEmptyListBoundary(after, 'start');
+            removeEmptyStructuralBoundary(before, 'end');
+            removeEmptyStructuralBoundary(after, 'start');
 
             const paragraph = document.createElement('p');
             paragraph.append(fragment);
@@ -2699,6 +3349,8 @@ export default class TextToolbar {
                 return;
             }
 
+            const shortcodes = this.#selectedInlineShortcodes();
+
             /*
              * Ask the browser to generate CSS styles rather than legacy
              * <font face> markup. This also avoids replacing nodes immediately
@@ -2706,6 +3358,7 @@ export default class TextToolbar {
              */
             document.execCommand('styleWithCSS', false, true);
             document.execCommand('fontName', false, selectedFont);
+            this.#formatInlineShortcodes(shortcodes, 'fontName', selectedFont);
 
             this.activeEditable?.dispatchEvent(new InputEvent('input', {
                 bubbles: true,
@@ -2775,6 +3428,7 @@ export default class TextToolbar {
                 return;
             }
 
+            const shortcodes = this.#selectedInlineShortcodes();
             const bookmark = this.#getTextSelectionBookmark();
 
             document.execCommand('fontSize', false, '7');
@@ -2789,6 +3443,8 @@ export default class TextToolbar {
 
                 element.replaceWith(span);
             });
+
+            this.#formatInlineShortcodes(shortcodes, 'fontSizePt', selectedSize);
 
             this.activeEditable?.dispatchEvent(new InputEvent('input', {
                 bubbles: true,
@@ -2896,7 +3552,9 @@ export default class TextToolbar {
                 return;
             }
 
+            const shortcodes = this.#selectedInlineShortcodes();
             document.execCommand('foreColor', false, color.value);
+            this.#formatInlineShortcodes(shortcodes, 'foreColor', color.value);
             this.#keepSelection();
         });
         colorControl.append(color);
@@ -2926,7 +3584,9 @@ export default class TextToolbar {
                 return;
             }
 
+            const shortcodes = this.#selectedInlineShortcodes();
             document.execCommand('hiliteColor', false, backgroundColor.value);
+            this.#formatInlineShortcodes(shortcodes, 'hiliteColor', backgroundColor.value);
             this.#keepSelection();
         });
         backgroundColorControl.append(backgroundColor);
@@ -3160,6 +3820,10 @@ export default class TextToolbar {
 
         secondRow.append(
 
+            // Reusable user-defined composite styles
+            this.#toolbarItem('compositeStyles', this.#compositeStylesDropdown()),
+            this.#separator(),
+
             // Paragraph formatting
             this.#toolbarItem('paragraph', format),
             this.#toolbarItem('lineHeight', lineHeight),
@@ -3265,6 +3929,37 @@ export default class TextToolbar {
 
             current = current.parentElement;
         }
+
+        const compositeElement = ancestors.find(element =>
+            Boolean(element.dataset.vhdCompositeStyle)
+        );
+        const compositeStyle = compositeElement
+            ? this.compositeStyles.find(style =>
+                style.id === compositeElement.dataset.vhdCompositeStyle
+            )
+            : null;
+        const appliedRevision = Number.parseInt(
+            compositeElement?.dataset.vhdCompositeStyleRevision,
+            10
+        ) || 0;
+
+        this.actions.compositeStyleContext?.(
+            compositeStyle
+                ? {
+                    id: compositeStyle.id,
+                    name: compositeStyle.name,
+                    status: appliedRevision === compositeStyle.revision
+                        ? 'current'
+                        : 'outdated'
+                }
+                : compositeElement
+                    ? {
+                        id: compositeElement.dataset.vhdCompositeStyle,
+                        name: compositeElement.dataset.vhdCompositeStyleName || '',
+                        status: 'missing'
+                    }
+                    : null
+        );
 
         const hasTag = (...tags) => ancestors.some(element =>
             tags.includes(element.tagName.toLowerCase())

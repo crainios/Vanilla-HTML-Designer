@@ -2,6 +2,7 @@
     'use strict';
 
     const script = document.currentScript;
+    const initializedButtons = new WeakSet();
 
     function loadStyles() {
         if (document.querySelector('link[data-vhd-code-styles], style[data-vhd-code-styles]')) {
@@ -65,22 +66,38 @@
     }
 
     function enhanceBlock(pre) {
-        if (!(pre instanceof HTMLElement) || pre.dataset.vhdCodeReady === 'true') {
+        if (!(pre instanceof HTMLElement)) {
             return;
         }
 
         pre.dataset.vhdCodeReady = 'true';
 
-        const wrapper = document.createElement('div');
-        wrapper.className = 'vhd-code-wrapper';
+        // Saved HTML may already contain the wrapper, button and ready attribute.
+        // Event listeners must still be installed for this document.
+        let wrapper = pre.parentElement;
+        if (!wrapper?.classList.contains('vhd-code-wrapper')) {
+            wrapper = document.createElement('div');
+            wrapper.className = 'vhd-code-wrapper';
+            pre.parentNode.insertBefore(wrapper, pre);
+            wrapper.append(pre);
+        }
 
-        pre.parentNode.insertBefore(wrapper, pre);
-        wrapper.append(pre);
+        let button = Array.from(wrapper.children).find(child =>
+            child.matches('button.vhd-code-copy')
+        );
+        if (button && initializedButtons.has(button)) {
+            return;
+        }
 
         const text = labels();
-        const button = document.createElement('button');
+        if (!button) {
+            button = document.createElement('button');
+            wrapper.append(button);
+        }
         button.type = 'button';
         button.className = 'vhd-code-copy';
+        button.contentEditable = 'false';
+        button.draggable = false;
         button.title = text.copy;
         button.setAttribute('aria-label', text.copy);
         button.innerHTML = copyIcon();
@@ -105,7 +122,7 @@
             }
         });
 
-        wrapper.append(button);
+        initializedButtons.add(button);
     }
 
     function enhance(root) {
@@ -127,6 +144,22 @@
                 for (const node of record.addedNodes) {
                     if (node.nodeType === Node.ELEMENT_NODE) {
                         enhance(node);
+                    }
+                }
+
+                const wrapper = record.target instanceof Element
+                    ? record.target.closest('.vhd-code-wrapper')
+                    : null;
+
+                if (wrapper) {
+                    const pre = Array.from(wrapper.children).find(child =>
+                        child.matches('pre.vhd-code')
+                    );
+
+                    if (pre) {
+                        enhanceBlock(pre);
+                    } else {
+                        wrapper.remove();
                     }
                 }
             }

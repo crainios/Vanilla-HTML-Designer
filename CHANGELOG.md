@@ -1,3 +1,9 @@
+## [0.8.25] - 2026-11-18
+
+### Changed
+
+- The contextual Link action now pre-fills the URL prompt with the selected text, including the source text of protected shortcodes.
+
 ## [0.8.24] - 2026-10-03
 
 ### Changed

@@ -1,9 +1,9 @@
-import Shortcodes, { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from './Shortcodes.js?v=0.8.24';
+import Shortcodes, { serializeShortcodes, shortcodeTextFragment, shortcodePlainText } from './Shortcodes.js?v=0.8.25';
 import Grid from '../layout/Grid.js';
 import BlockFactory from '../blocks/BlockFactory.js';
 import Serializer from './Serializer.js';
 import History from './History.js';
-import TextToolbar from '../toolbar/TextToolbar.js?v=0.8.24';
+import TextToolbar from '../toolbar/TextToolbar.js?v=0.8.25';
 import HtmlImporter from './HtmlImporter.js';
 import { sanitizeHtml } from './HtmlSanitizer.js';
 
@@ -4927,7 +4927,13 @@ export default class Editor {
         }
 
         if (action === 'link') {
-            const url = window.prompt('URL');
+            const selectedText = this.selectionMenuRange instanceof Range
+                ? this.#rangeToPlainText(this.selectionMenuRange).trim()
+                : '';
+            const url = window.prompt(
+                this.t.properties.linkUrl,
+                selectedText
+            );
 
             if (!url || !restore()) {
                 this.#hideSelectionMenu();
